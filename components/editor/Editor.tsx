@@ -5,6 +5,7 @@ import StarterKit from '@tiptap/starter-kit';
 import { Markdown } from 'tiptap-markdown'; 
 import Highlight from '@tiptap/extension-highlight'; // <-- NEW
 import Typography from '@tiptap/extension-typography'; // <-- NEW
+import Image from '@tiptap/extension-image'; // <-- 1. IMPORT NATIVE IMAGE
 import { ImageBlock } from './extensions/ImageBlock';
 import { MenuBar } from './MenuBar'; 
 import { useEffect, useState, useRef } from 'react';
@@ -19,13 +20,17 @@ export default function Editor() {
   const isWritingDoc = useRef(false);
 
   const editor = useEditor({
-    // ADD THE NEW EXTENSIONS HERE
-    extensions: [StarterKit, ImageBlock, Markdown, Highlight, Typography], 
+    // 2. ADD NATIVE IMAGE TO EXTENSIONS
+    extensions: [StarterKit, ImageBlock, Markdown, Highlight, Typography, Image], 
     content: '<h1>Your blog post will appear here...</h1>',
     editable: true,
     immediatelyRender: false,
     editorProps: {
-      attributes: { class: 'prose prose-lg focus:outline-none max-w-3xl mx-auto py-10 px-8 h-full min-h-[800px]' },
+      attributes: { 
+        class: 'prose prose-lg focus:outline-none max-w-3xl mx-auto py-10 px-8 h-full min-h-[800px]',
+        // 3. THE LONG TEXT PERFORMANCE FIX
+        spellcheck: 'false' 
+      },
     },
   });
 

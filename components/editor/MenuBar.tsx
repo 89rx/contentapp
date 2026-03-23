@@ -16,6 +16,16 @@ export const MenuBar = ({ editor }: { editor: Editor | null }) => {
       isActive ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
     }`;
 
+    // The Image Prompt Function
+    const addImage = () => {
+        const url = window.prompt('Enter the image URL:');
+        
+        if (url && editor) {
+          
+          (editor.commands as any).setImage({ src: url });
+        }
+      };
+
   return (
     <div className="flex flex-wrap items-center gap-1 p-2 bg-white border-b border-gray-200 shadow-sm z-20">
       <button onClick={() => editor.chain().focus().toggleBold().run()} disabled={!editorState.canBold} className={btn(editorState.isBold, !editorState.canBold)}><b>B</b></button>
@@ -44,6 +54,12 @@ export const MenuBar = ({ editor }: { editor: Editor | null }) => {
       <button onClick={() => editor.chain().focus().toggleOrderedList().run()} className={btn(editorState.isOrderedList)}>1. List</button>
       <button onClick={() => editor.chain().focus().toggleBlockquote().run()} className={btn(editorState.isBlockquote)}>Quote</button>
       
+      <div className="w-px h-5 bg-gray-300 mx-1" />
+
+      <button onClick={addImage} className={btn(false)}>
+        🖼️ Image
+      </button>
+
       <div className="w-px h-5 bg-gray-300 mx-1" />
       
       <button onClick={() => editor.chain().focus().clearNodes().unsetAllMarks().run()} className="px-2.5 py-1.5 text-sm font-medium text-gray-500 hover:text-red-600 transition-colors">Clear</button>

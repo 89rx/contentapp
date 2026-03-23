@@ -21,6 +21,14 @@ export const MenuBar = ({ editor }: { editor: Editor | null }) => {
       <button onClick={() => editor.chain().focus().toggleBold().run()} disabled={!editorState.canBold} className={btn(editorState.isBold, !editorState.canBold)}><b>B</b></button>
       <button onClick={() => editor.chain().focus().toggleItalic().run()} disabled={!editorState.canItalic} className={btn(editorState.isItalic, !editorState.canItalic)}><i>I</i></button>
       <button onClick={() => editor.chain().focus().toggleStrike().run()} disabled={!editorState.canStrike} className={btn(editorState.isStrike, !editorState.canStrike)}><s>S</s></button>
+      
+            <button 
+            onClick={() => editor.chain().focus().toggleHighlight().run()} 
+            disabled={!editorState.canHighlight} 
+            className={btn(editorState.isHighlight, !editorState.canHighlight)}
+            >
+            <span className="bg-yellow-200 px-1 rounded">Mark</span>
+            </button>
       <button onClick={() => editor.chain().focus().toggleCode().run()} disabled={!editorState.canCode} className={btn(editorState.isCode, !editorState.canCode)}>{`</>`}</button>
       
       <div className="w-px h-5 bg-gray-300 mx-1" />

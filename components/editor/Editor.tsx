@@ -2,9 +2,11 @@
 
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import { Markdown } from 'tiptap-markdown'; // <-- 1. IMPORT THIS
+import { Markdown } from 'tiptap-markdown'; 
+import Highlight from '@tiptap/extension-highlight'; // <-- NEW
+import Typography from '@tiptap/extension-typography'; // <-- NEW
 import { ImageBlock } from './extensions/ImageBlock';
-import { MenuBar } from './MenuBar'; // <-- 2. IMPORT THIS
+import { MenuBar } from './MenuBar'; 
 import { useEffect, useState, useRef } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
@@ -17,8 +19,8 @@ export default function Editor() {
   const isWritingDoc = useRef(false);
 
   const editor = useEditor({
-    // 3. ADD MARKDOWN TO EXTENSIONS
-    extensions: [StarterKit, ImageBlock, Markdown], 
+    // ADD THE NEW EXTENSIONS HERE
+    extensions: [StarterKit, ImageBlock, Markdown, Highlight, Typography], 
     content: '<h1>Your blog post will appear here...</h1>',
     editable: true,
     immediatelyRender: false,

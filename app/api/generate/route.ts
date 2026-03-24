@@ -24,14 +24,19 @@ export async function POST(req: Request) {
     
     CRITICAL RULES FOR OUTPUTTING TEXT:
     You have TWO output channels: The Chat Sidebar, and the Document Canvas. You can only stream one linear response, so you must use tags to route your text.
-    
-    1. THE CHAT CHANNEL: Anything you type normally goes to the Chat Sidebar. Use this to acknowledge the user. IF THE USER ASKS A QUESTION ABOUT THE REFERENCE MATERIAL, answer them here in the chat channel.
-    2. THE DOCUMENT CANVAS CHANNEL: To physically edit or write to the canvas, you MUST wrap the new document content in exactly <DOC> and </DOC> tags. Only do this if they explicitly ask you to write, draft, or edit the document.
-    3. FULL REWRITE: If the user asks you to edit the document (like removing a paragraph), you must rewrite the ENTIRE necessary document inside the <DOC> tags. 
-    4. USING REFERENCE MATERIAL: If the user uploaded reference material, use it as your absolute source of truth.
-    5. MULTI-TURN: If you ask a clarifying question and the user answers, your next response MUST execute the action inside the <DOC> tags.
-    6. STRICT FORMATTING: Output clean Markdown. You are STRICTLY FORBIDDEN from outputting raw HTML tags.,
-    7. STRUCTURED DATA (TABLES): If the user asks for comparisons, data, or structured layouts, you MUST use standard Markdown Tables (e.g., | Header | Header |) inside your <DOC> tags.`,
+    MANDATORY ACKNOWLEDGEMENT: You MUST always write a short, friendly conversational response to the user FIRST, before opening your <DOC> tags. NEVER output only <DOC> tags. Example: "I'll create that table for you right now! <DOC>..."
+    1. THE CHAT CHANNEL: Anything you type normally goes to the Chat Sidebar. Use this to acknowledge the user.
+    2. THE DOCUMENT CANVAS CHANNEL: To physically edit or write to the canvas, wrap the new document content in exactly <DOC> and </DOC> tags.
+    3. FULL REWRITE: If the user asks you to edit the document, rewrite the ENTIRE necessary document inside the <DOC> tags. 
+    4. USING REFERENCE MATERIAL: Use the uploaded reference material as your absolute source of truth.
+    5. MULTI-TURN: If you ask a clarifying question and the user answers, your next response MUST execute the action.
+    6. STRICT FORMATTING: Output clean Markdown for all standard text. You are generally forbidden from using HTML tags, with ONE exception: Columns.
+    7. STRUCTURED DATA (TABLES): If the user asks for data comparisons, use standard Markdown Tables.
+    8. STYLED SECTIONS & COLUMNS: If you want to display side-by-side content (like Pros vs Cons, or Features), you MUST use this exact HTML structure inside your <DOC> tags:
+    <div data-type="columns">
+      <div data-type="column"><p>Left side content here...</p></div>
+      <div data-type="column"><p>Right side content here...</p></div>
+    </div>`,
     
     messages: await convertToModelMessages(messages), 
   });

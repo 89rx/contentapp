@@ -16,7 +16,6 @@ export const MenuBar = ({ editor }: { editor: Editor | null }) => {
       isActive ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
     }`;
 
-  // FIX: Bulletproof image prompt bypassing TypeScript chain restrictions
   const addImage = () => {
     const url = window.prompt('Enter the image URL:');
     if (url && editor) {
@@ -58,20 +57,28 @@ export const MenuBar = ({ editor }: { editor: Editor | null }) => {
         🖼️ Image
       </button>
 
-      {/* --- NEW: TABLE CONTROLS --- */}
+      {/* FIXED: Columns now highlight using the selector */}
+      <button 
+        onClick={() => editor.chain().focus().insertContent('<div data-type="columns"><div data-type="column"><p>Left Column</p></div><div data-type="column"><p>Right Column</p></div></div>').run()} 
+        className={btn(editorState.isColumns)}
+        title="Insert 2 Columns"
+      >
+        ⏸️ Columns
+      </button>
+
       <div className="w-px h-5 bg-gray-300 mx-1" />
       
-      {/* 1. Always show the Insert Table button */}
+      {/* FIXED: Table highlights using the selector */}
       <button 
         onClick={() => (editor.chain().focus() as any).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} 
-        className={btn(editor.isActive('table'))}
+        className={btn(editorState.isTable)}
         title="Insert Table"
       >
         ▦ Table
       </button>
 
-      {/* 2. DYNAMIC CONTROLS: Only show these when the cursor is inside a table! */}
-      {editor.isActive('table') && (
+      {/* FIXED: Dynamic controls toggle based on the state selector */}
+      {editorState.isTable && (
         <div className="flex items-center gap-1 bg-gray-50 p-0.5 rounded-lg border border-gray-200">
           <button onClick={() => (editor.chain().focus() as any).addRowAfter().run()} className="px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200 rounded">
             + Row

@@ -11,6 +11,7 @@ import { MenuBar } from './MenuBar';
 import { useEffect, useState, useRef } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
+import { ColumnBlock, Column } from './extensions/Columns';
 
 // --- TABLE IMPORTS ---
 import { Table } from '@tiptap/extension-table';
@@ -66,6 +67,8 @@ export default function Editor() {
       TableRow,
       TableHeader,
       CustomTableCell,
+      ColumnBlock, // NEW
+      Column,
     ], 
     content: '<h1>Highlight me and ask the AI to change me!</h1><p>This is some example text to test the bubble menu iteration feature.</p>',
     editable: true,

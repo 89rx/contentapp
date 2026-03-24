@@ -7,7 +7,6 @@ import { Markdown } from 'tiptap-markdown';
 import Highlight from '@tiptap/extension-highlight'; 
 import Typography from '@tiptap/extension-typography'; 
 import Image from '@tiptap/extension-image'; 
-import { ImageBlock } from './extensions/ImageBlock';
 import { MenuBar } from './MenuBar'; 
 import { useEffect, useState, useRef } from 'react';
 import { useChat } from '@ai-sdk/react';
@@ -17,15 +16,17 @@ export default function Editor() {
   const [isMounted, setIsMounted] = useState(false);
   const [promptInput, setPromptInput] = useState('');
   
-  // States for the Bubble Menu
   const [editPrompt, setEditPrompt] = useState('');
   const [isEditingSelection, setIsEditingSelection] = useState(false);
+
+  const [attachment, setAttachment] = useState<{name: string, content: string} | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null); 
   
-  const processedToolCalls = useRef(new Set<string>());
   const isWritingDoc = useRef(false);
 
   const editor = useEditor({
-    extensions: [StarterKit, ImageBlock, Markdown, Highlight, Typography, Image], 
+    // Removed ImageBlock from extensions array
+    extensions: [StarterKit, Markdown, Highlight, Typography, Image], 
     content: '<h1>Highlight me and ask the AI to change me!</h1><p>This is some example text to test the bubble menu iteration feature.</p>',
     editable: true,
     immediatelyRender: false,
@@ -49,16 +50,18 @@ export default function Editor() {
     setIsMounted(true);
   }, []);
 
-  // --- EXISTING DUAL-STREAM ROUTER LOGIC ---
+  // --- DUAL-STREAM ROUTER LOGIC (NO TOOLS) ---
   useEffect(() => {
     if (!editor || messages.length === 0) return;
     const latestMessage = messages[messages.length - 1];
+    
     if (latestMessage.role === 'assistant') {
       setTimeout(() => {
         latestMessage.parts.forEach(part => {
           if (part.type === 'text') {
             const fullText = part.text || '';
             const docStartIndex = fullText.indexOf('<DOC>');
+            
             if (docStartIndex !== -1) {
               if (!isWritingDoc.current) {
                 isWritingDoc.current = true;
@@ -68,26 +71,44 @@ export default function Editor() {
               editor.commands.setContent(docContent);
             }
           }
-          if (part.type === 'tool-insertImage') {
-             if (!processedToolCalls.current.has(part.toolCallId) && (part.state === 'input-available' || part.state === 'output-available')) {
-                const input = part.input as any;
-                editor.commands.insertContent({
-                  type: 'imageBlock',
-                  attrs: { altText: input.altText, caption: input.caption, layout: input.layout }
-                });
-                processedToolCalls.current.add(part.toolCallId);
-             }
-          }
         });
       }, 0); 
     }
   }, [messages, editor]);
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      alert('File must be under 2MB to prevent token limits.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      setAttachment({ name: file.name, content });
+    };
+    reader.readAsText(file);
+    
+    e.target.value = ''; 
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!promptInput.trim() || isLoading || !editor) return;
     isWritingDoc.current = false; 
-    sendMessage({ text: promptInput }, { body: { documentContext: editor.getText() } }); 
+    
+    sendMessage(
+      { text: promptInput }, 
+      { body: { 
+          documentContext: editor.getText(),
+          referenceContext: attachment?.content || '' 
+        } 
+      }
+    ); 
+    
     setPromptInput('');
   };
 
@@ -97,11 +118,9 @@ export default function Editor() {
     return text;
   };
 
-  // --- INLINE EDIT STREAMING LOGIC ---
   const handleInlineEdit = async (actionPrompt: string) => {
     if (!editor) return;
     
-    // 1. Grab the currently highlighted text
     const { from, to } = editor.state.selection;
     const selectedText = editor.state.doc.textBetween(from, to, '\n');
     
@@ -111,7 +130,6 @@ export default function Editor() {
     editor.setEditable(false);
 
     try {
-      // 2. Call our dedicated, silent edit endpoint
       const response = await fetch('/api/edit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -120,10 +138,8 @@ export default function Editor() {
 
       if (!response.body) throw new Error('No response body');
 
-      // 3. Delete the highlighted text to make room for the new text
       editor.commands.deleteSelection();
 
-      // 4. Stream the new text directly to the cursor position
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
 
@@ -163,7 +179,6 @@ export default function Editor() {
         
         <div className="flex-1 overflow-y-auto relative">
           
-          {/* V3 FIX: The AI Bubble Menu with updated 'options' syntax */}
           {editor && (
             <BubbleMenu 
               editor={editor} 
@@ -238,17 +253,6 @@ export default function Editor() {
                      if (part.type === 'text') {
                        return <span key={index} className="whitespace-pre-wrap leading-relaxed">{renderChatMessage(part.text)}</span>;
                      }
-                     if (part.type === 'tool-insertImage') {
-                        return (
-                          <div key={index} className="mt-3 p-3 bg-gray-50 border border-gray-100 rounded-lg text-xs text-gray-500 font-mono flex items-center gap-2">
-                            <span className="text-lg">🛠️</span>
-                            <div>
-                              <span className="font-semibold block text-gray-700">Action Executed</span>
-                              Inserted image block into canvas
-                            </div>
-                          </div>
-                        );
-                     }
                      return null;
                   })}
                 </div>
@@ -257,23 +261,57 @@ export default function Editor() {
           )}
         </div>
 
+        {/* --- CHAT INPUT UI --- */}
         <div className="p-4 bg-white border-t border-gray-200 shrink-0">
-          <form onSubmit={handleSubmit} className="relative flex items-center">
-            <input
-              type="text"
-              value={promptInput}
-              onChange={(e) => setPromptInput(e.target.value)}
-              disabled={isLoading}
-              placeholder="Ask the AI to write or edit..."
-              className="w-full pl-4 pr-12 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all disabled:opacity-60 bg-gray-50 focus:bg-white text-sm"
+          
+          {attachment && (
+            <div className="flex items-center gap-2 mb-3 px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-medium rounded-lg inline-flex w-fit border border-blue-100 shadow-sm">
+              📄 {attachment.name}
+              <button 
+                type="button"
+                onClick={() => setAttachment(null)}
+                className="ml-2 text-blue-400 hover:text-blue-800 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="relative flex items-center gap-2">
+            
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              onChange={handleFileUpload} 
+              accept=".txt,.md,.csv,.json" 
+              className="hidden" 
             />
             <button 
-              type="submit"
-              disabled={isLoading || !promptInput.trim()}
-              className="absolute right-2 p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm"
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="p-2 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-xl transition-colors shrink-0"
+              title="Attach context file (Max 2MB)"
             >
-              ↑
+              📎
             </button>
+
+            <div className="relative flex-1">
+              <input
+                type="text"
+                value={promptInput}
+                onChange={(e) => setPromptInput(e.target.value)}
+                disabled={isLoading}
+                placeholder="Ask the AI to write or edit..."
+                className="w-full pl-4 pr-10 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all disabled:opacity-60 bg-gray-50 focus:bg-white text-sm"
+              />
+              <button 
+                type="submit"
+                disabled={isLoading || !promptInput.trim()}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm"
+              >
+                ↑
+              </button>
+            </div>
           </form>
         </div>
       </div>

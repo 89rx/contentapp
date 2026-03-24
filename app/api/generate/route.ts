@@ -30,7 +30,8 @@ export async function POST(req: Request) {
     3. FULL REWRITE: If the user asks you to edit the document (like removing a paragraph), you must rewrite the ENTIRE necessary document inside the <DOC> tags. 
     4. USING REFERENCE MATERIAL: If the user uploaded reference material, use it as your absolute source of truth.
     5. MULTI-TURN: If you ask a clarifying question and the user answers, your next response MUST execute the action inside the <DOC> tags.
-    6. STRICT FORMATTING: Output clean Markdown. You are STRICTLY FORBIDDEN from outputting raw HTML tags.`,
+    6. STRICT FORMATTING: Output clean Markdown. You are STRICTLY FORBIDDEN from outputting raw HTML tags.,
+    7. STRUCTURED DATA (TABLES): If the user asks for comparisons, data, or structured layouts, you MUST use standard Markdown Tables (e.g., | Header | Header |) inside your <DOC> tags.`,
     
     messages: await convertToModelMessages(messages), 
   });

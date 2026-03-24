@@ -12,6 +12,34 @@ import { useEffect, useState, useRef } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 
+// --- TABLE IMPORTS ---
+import { Table } from '@tiptap/extension-table';
+import { TableRow } from '@tiptap/extension-table-row';
+import { TableHeader } from '@tiptap/extension-table-header';
+import { TableCell } from '@tiptap/extension-table-cell';
+
+// --- EXACT CUSTOM TABLE CELL FROM DOCS ---
+const CustomTableCell = TableCell.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      backgroundColor: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-background-color'),
+        renderHTML: attributes => {
+          if (!attributes.backgroundColor) {
+            return {};
+          }
+          return {
+            'data-background-color': attributes.backgroundColor,
+            style: `background-color: ${attributes.backgroundColor}`,
+          };
+        },
+      },
+    };
+  },
+});
+
 export default function Editor() {
   const [isMounted, setIsMounted] = useState(false);
   const [promptInput, setPromptInput] = useState('');
@@ -25,8 +53,20 @@ export default function Editor() {
   const isWritingDoc = useRef(false);
 
   const editor = useEditor({
-    // Removed ImageBlock from extensions array
-    extensions: [StarterKit, Markdown, Highlight, Typography, Image], 
+    extensions: [
+      StarterKit, 
+      Markdown, 
+      Highlight, 
+      Typography, 
+      Image,
+      // TABLE CONFIGURATION (Using CustomTableCell)
+      Table.configure({
+        resizable: true,
+      }),
+      TableRow,
+      TableHeader,
+      CustomTableCell,
+    ], 
     content: '<h1>Highlight me and ask the AI to change me!</h1><p>This is some example text to test the bubble menu iteration feature.</p>',
     editable: true,
     immediatelyRender: false,
@@ -50,7 +90,6 @@ export default function Editor() {
     setIsMounted(true);
   }, []);
 
-  // --- DUAL-STREAM ROUTER LOGIC (NO TOOLS) ---
   useEffect(() => {
     if (!editor || messages.length === 0) return;
     const latestMessage = messages[messages.length - 1];
@@ -166,7 +205,6 @@ export default function Editor() {
   return (
     <div className="flex h-screen w-screen bg-gray-100 overflow-hidden">
       
-      {/* THE CANVAS */}
       <div className="flex-1 flex flex-col bg-white border-r border-gray-200 shadow-sm z-10 relative">
         <div className="h-14 border-b border-gray-200 bg-white flex items-center px-6 justify-between shrink-0">
           <h1 className="text-lg font-semibold text-gray-800">AI Content Editor</h1>
@@ -182,7 +220,6 @@ export default function Editor() {
           {editor && (
             <BubbleMenu 
               editor={editor} 
-              options={{ placement: 'top' }}
               className="flex items-center gap-1 p-1.5 bg-white border border-gray-200 rounded-xl shadow-xl transition-all"
             >
               <button 
@@ -230,7 +267,6 @@ export default function Editor() {
         </div>
       </div>
 
-      {/* THE CHAT SIDEBAR */}
       <div className="w-[400px] flex flex-col bg-gray-50 shrink-0">
         <div className="h-14 border-b border-gray-200 bg-white flex items-center px-6 shrink-0 shadow-sm z-10">
           <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wider">AI Assistant</h2>
@@ -261,7 +297,6 @@ export default function Editor() {
           )}
         </div>
 
-        {/* --- CHAT INPUT UI --- */}
         <div className="p-4 bg-white border-t border-gray-200 shrink-0">
           
           {attachment && (

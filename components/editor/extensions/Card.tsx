@@ -13,19 +13,17 @@ const CardComponent = (props: any) => {
 
     setIsStreaming(true);
     
-    // 1. Grab the current text inside this specific card
     const selectedText = props.node.textContent;
-    
-    // 2. Wipe the card clean safely before streaming begins
     const initialFrom = props.getPos() + 1;
     const initialTo = props.getPos() + props.node.nodeSize - 1;
+    
+    // 🚨 NEW: Show a safe, native loading state instead of live-streaming incomplete HTML!
     props.editor.chain()
       .deleteRange({ from: initialFrom, to: initialTo })
-      .insertContentAt(initialFrom, '<p></p>')
+      .insertContentAt(initialFrom, '<p class="text-purple-600 animate-pulse font-medium">✨ AI is rewriting this card...</p>')
       .run();
 
     try {
-      // 3. Hit your existing edit API
       const response = await fetch('/api/edit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -37,38 +35,34 @@ const CardComponent = (props: any) => {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       
-      // FIX: Accumulate the text instead of pushing raw chunks
       let fullText = '';
 
+      // 🚨 NEW: Buffer the text completely before touching TipTap
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        
-        // Use stream: true so multi-byte characters don't get split in half
         fullText += decoder.decode(value, { stream: true });
+      }
 
-        // Calculate the dynamic position of the card in case it shifted
-        const pos = props.getPos();
-        const currentNode = props.editor.state.doc.nodeAt(pos);
+      // 🚨 NEW: Aggressively strip any hallucinated markdown blocks
+      const cleanedText = fullText
+        .replace(/^```html\s*/i, '')
+        .replace(/^```\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .trim();
 
-        if (currentNode && currentNode.type.name === 'documentCard') {
-          const from = pos + 1;
-          const to = pos + currentNode.nodeSize - 1;
+      const pos = props.getPos();
+      const currentNode = props.editor.state.doc.nodeAt(pos);
 
-          try {
-            // FIX: Replace the inner content with the FULL accumulated string so far.
-            // If the markdown is valid, the transaction executes and the UI updates.
-            props.editor.chain()
-              .deleteRange({ from, to })
-              .insertContentAt(from, fullText)
-              .run();
-          } catch (astError) {
-            // THE MAGIC SHIELD: If the AI streams an incomplete tag (like "* "), 
-            // TipTap will throw a RangeError schema violation. We catch it silently.
-            // The transaction aborts, the UI holds the previous valid frame, 
-            // and we just wait for the next chunk to finish the word!
-          }
-        }
+      if (currentNode && currentNode.type.name === 'documentCard') {
+        const from = pos + 1;
+        const to = pos + currentNode.nodeSize - 1;
+
+        // Insert the perfectly formed HTML all at once
+        props.editor.chain()
+          .deleteRange({ from, to })
+          .insertContentAt(from, cleanedText)
+          .run();
       }
     } catch (error) {
       console.error("Card AI Edit failed:", error);

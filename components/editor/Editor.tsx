@@ -48,7 +48,7 @@ export default function Editor() {
   const [editPrompt, setEditPrompt] = useState('');
   const [isEditingSelection, setIsEditingSelection] = useState(false);
 
-  // 🚨 NEW: Tracks if the image API is running to disable input!
+  // 🚨 UI LOCK STATES
   const [isGeneratingImg, setIsGeneratingImg] = useState(false);
 
   const [attachment, setAttachment] = useState<{name: string, content: string} | null>(null);
@@ -71,7 +71,7 @@ export default function Editor() {
       Column,      
       DocumentCard, 
     ], 
-    content: `<div data-type="card"><div data-type="columns"><div data-type="column"><h1>The World of Birds</h1><h2>Graceful, diverse, and endlessly fascinating—birds bring color, movement, and song to every corner of the natural world.</h2><p><strong>by Ayan</strong><br><span class="text-gray-500">Last edited about 23 hours ago</span></p></div><div data-type="column"><img src="https://image.pollinations.ai/prompt/Minimalist%20minimalist%20minimalist%20editorial%20design%20aesthetic%20photo%20of%20a%20modern%20editorial%20workspace%20with%20a%20blank%20Macbook%20on%20a%20wooden%20desk%20and%20a%20large%20plant%20in%20soft%20daylight" alt="Editorial Workspace" class="w-full h-full object-cover rounded-xl shadow-sm border border-gray-100" /></div></div></div><div data-type="card"><p>This is your Content Card. Ask the AI to write a blog post, and it will automatically generate the text layout first, followed seamlessly by the image stream!</p></div>`,
+    content: `<div data-type="card"><div data-type="columns"><div data-type="column"><h1>The World of Birds</h1><h2>Graceful, diverse, and endlessly fascinating—birds bring color, movement, and song to every corner of the natural world.</h2></div><div data-type="column"><img src="https://image.pollinations.ai/prompt/Minimalist%20minimalist%20minimalist%20editorial%20design%20aesthetic%20photo%20of%20a%20modern%20editorial%20workspace%20with%20a%20blank%20Macbook%20on%20a%20wooden%20desk%20and%20a%20large%20plant%20in%20soft%20daylight" alt="Editorial Workspace" class="w-full h-full object-cover rounded-xl shadow-sm border border-gray-100" /></div></div></div><div data-type="card"><p>This is your Content Card. Ask the AI to write a blog post, and it will automatically generate the text layout first, followed seamlessly by the image stream!</p></div>`,
     editable: true,
     immediatelyRender: false,
     editorProps: {
@@ -89,13 +89,21 @@ export default function Editor() {
   });
 
   const isLoading = status === 'submitted' || status === 'streaming';
-  
-  // 🚨 COMBINED LOCK: True if Text is writing OR Image is streaming
   const isInputDisabled = isLoading || isGeneratingImg;
+  
+  // 🚨 MASTER LOCK: True if ANY AI process (Chat, Image, or Inline Edit) is running
+  const isGlobalLock = isInputDisabled || isEditingSelection;
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  // 🚨 ENFORCE EDITOR READ-ONLY STATE DURING GENERATION
+  useEffect(() => {
+    if (editor && editor.isEditable === isGlobalLock) {
+      editor.setEditable(!isGlobalLock);
+    }
+  }, [isGlobalLock, editor]);
 
   // --- 1. THE MESSAGE LISTENER (PURE TEXT STREAMING) ---
   useEffect(() => {
@@ -121,106 +129,153 @@ export default function Editor() {
     }
   }, [messages, editor]);
 
-  // --- 2. THE SEQUENTIAL TRIGGER (HTML DOM SCRAPER) ---
+  // --- 2. THE UNIVERSAL MULTI-IMAGE SCANNER ---
   useEffect(() => {
-    // When text stops streaming, check the canvas for a pending image!
-    if (!isLoading && editor) {
-      
+    if (!editor) return;
+
+    let isProcessing = false;
+
+    const processImages = async () => {
+      // Prevent overlapping instances
+      if (isProcessing) return;
+      isProcessing = true;
+
       let targetPos: number | null = null;
       let promptToGenerate: string | null = null;
 
+      // 1. Scan the document for ANY pending image
       editor.state.doc.descendants((node, pos) => {
-        if (node.type.name === 'image' && node.attrs.title === 'pending-generation') {
-          targetPos = pos;
-          promptToGenerate = node.attrs.alt; 
-          return false; // Stop traversing once found
+        if (node.type.name === 'image') {
+          const title = node.attrs.title || '';
+          const src = node.attrs.src || '';
+          
+          // Fallback catch: Even if AI forgets the title, if it's our raw SVG string, it's pending!
+          const isPending = title === 'pending-generation' || (src.includes('svg+xml') && title !== 'generating');
+
+          if (isPending) {
+            targetPos = pos;
+            promptToGenerate = node.attrs.alt || "A beautiful highly detailed illustration"; 
+            return false; 
+          }
         }
       });
 
-      if (targetPos !== null && promptToGenerate) {
-        console.log(`🎯 [TRIGGER] Text done! Found pending image prompt: "${promptToGenerate}"`);
+      // BASE CASE: Queue is empty
+      if (targetPos === null || !promptToGenerate) {
+        setIsGeneratingImg(false);
+        isProcessing = false;
+        return;
+      }
 
-        // 🚨 LOCK THE INPUT FIELD
-        setIsGeneratingImg(true);
+      console.log(`🎯 [UNIVERSAL SCANNER] Processing image prompt: "${promptToGenerate}"`);
+      setIsGeneratingImg(true); // Lock the UI
 
-        editor.commands.command(({ tr, dispatch }) => {
-          if (dispatch) {
-            const node = editor.state.doc.nodeAt(targetPos!);
-            if (node) tr.setNodeMarkup(targetPos!, null, { ...node.attrs, title: 'generating' });
-          }
-          return true;
-        });
+      // 2. Mark as 'generating' so we don't process it twice
+      editor.commands.command(({ tr, dispatch }) => {
+        if (dispatch) {
+          const node = editor.state.doc.nodeAt(targetPos!);
+          if (node) tr.setNodeMarkup(targetPos!, null, { ...node.attrs, title: 'generating' });
+        }
+        return true;
+      });
 
-        // Fire your background streaming API
-        fetch('/api/generate-image', {
+      // 3. Process the API Stream
+      try {
+        const res = await fetch('/api/generate-image', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ prompt: promptToGenerate })
-        })
-        .then(async (res) => {
-          if (!res.body) throw new Error("No response body");
-          
-          const reader = res.body.getReader();
-          const decoder = new TextDecoder();
-          let buffer = '';
+        });
 
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+        if (!res.ok) throw new Error("API returned an error response");
+        if (!res.body) throw new Error("No response body");
+        
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
 
-            buffer += decoder.decode(value, { stream: true });
-            let boundary = buffer.indexOf('\n\n');
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-            while (boundary !== -1) {
-              const msg = buffer.slice(0, boundary);
-              buffer = buffer.slice(boundary + 2);
+          buffer += decoder.decode(value, { stream: true });
+          let boundary = buffer.indexOf('\n\n');
 
-              if (msg.startsWith('data: ')) {
-                try {
-                  const data = JSON.parse(msg.slice(6));
-                  
-                  if (data.url && editor) {
-                    editor.commands.command(({ tr, dispatch }) => {
-                      let found = false;
-                      editor.state.doc.descendants((node, pos) => {
-                        if (node.type.name === 'image' && node.attrs.title === 'generating') {
-                          // The Base64 string overwrites the SVG spinner immediately!
-                          if (dispatch) tr.setNodeMarkup(pos, null, { ...node.attrs, src: data.url });
-                          found = true;
-                          return false; 
-                        }
-                      });
-                      return found;
+          while (boundary !== -1) {
+            const msg = buffer.slice(0, boundary);
+            buffer = buffer.slice(boundary + 2);
+
+            if (msg.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(msg.slice(6));
+                
+                if (data.url && editor) {
+                  editor.commands.command(({ tr, dispatch }) => {
+                    let found = false;
+                    editor.state.doc.descendants((node, pos) => {
+                      if (node.type.name === 'image' && node.attrs.title === 'generating') {
+                        if (dispatch) tr.setNodeMarkup(pos, null, { ...node.attrs, src: data.url });
+                        found = true;
+                        return false; 
+                      }
                     });
-                  }
-                } catch (e) {
-                  // Ignore fragmented JSON chunks
+                    return found;
+                  });
                 }
+              } catch (e) {
+                // Ignore fragmented JSON chunks
               }
-              boundary = buffer.indexOf('\n\n');
             }
+            boundary = buffer.indexOf('\n\n');
           }
-        })
-        .finally(() => {
-          // 🚨 UNLOCK THE INPUT FIELD
-          setIsGeneratingImg(false);
-          
-          editor.commands.command(({ tr, dispatch }) => {
-            let found = false;
-            editor.state.doc.descendants((node, pos) => {
-              if (node.type.name === 'image' && node.attrs.title === 'generating') {
-                if (dispatch) tr.setNodeMarkup(pos, null, { ...node.attrs, title: null });
-                found = true;
-                return false; 
+        }
+      } catch (err) {
+        console.error("🚨 [FETCH ERROR]:", err);
+        
+        // Error Recovery SVG
+        editor.commands.command(({ tr, dispatch }) => {
+          let found = false;
+          editor.state.doc.descendants((node, pos) => {
+            if (node.type.name === 'image' && node.attrs.title === 'generating') {
+              if (dispatch) {
+                const errorSvg = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='400' viewBox='0 0 800 400'%3E%3Crect width='100%25' height='100%25' fill='%23fee2e2'/%3E%3Ctext x='50%25' y='50%25' font-family='system-ui, sans-serif' font-size='20' font-weight='600' fill='%23991b1b' text-anchor='middle'%3EImage Generation Failed %E2%9A%A0%EF%B8%8F%3C/text%3E%3C/svg%3E`;
+                tr.setNodeMarkup(pos, null, { ...node.attrs, src: errorSvg, title: null });
               }
-            });
-            return found;
+              found = true;
+              return false; 
+            }
           });
-        })
-        .catch(err => console.error("🚨 [FETCH ERROR]:", err));
+          return found;
+        });
+      } finally {
+        // Clean up the title tag
+        editor.commands.command(({ tr, dispatch }) => {
+          editor.state.doc.descendants((node, pos) => {
+            if (node.type.name === 'image' && node.attrs.title === 'generating') {
+              if (dispatch) tr.setNodeMarkup(pos, null, { ...node.attrs, title: null });
+              return false; 
+            }
+          });
+          return true;
+        });
+
+        isProcessing = false;
+        
+        // RECURSION: Call it again in case multiple images were added
+        processImages();
       }
-    }
-  }, [isLoading, editor]);
+    };
+
+    // Listen to TipTap's native update event. Works for chat, card edits, AND bubble menu!
+    editor.on('update', processImages);
+    
+    // Check once on mount/dependency change just in case
+    processImages();
+
+    return () => {
+      editor.off('update', processImages);
+    };
+  }, [editor]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -254,7 +309,7 @@ export default function Editor() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!promptInput.trim() || isInputDisabled || !editor) return;
+    if (!promptInput.trim() || isGlobalLock || !editor) return;
     isWritingDoc.current = false; 
     
     sendMessage(
@@ -281,7 +336,7 @@ export default function Editor() {
     if (!selectedText) return;
 
     setIsEditingSelection(true);
-    editor.setEditable(false);
+    setEditPrompt('');
 
     try {
       const response = await fetch('/api/edit', {
@@ -291,23 +346,34 @@ export default function Editor() {
       });
 
       if (!response.body) throw new Error('No response body');
+      
+      // Delete old selection before we fetch
       editor.commands.deleteSelection();
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+      let fullText = '';
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value);
-        editor.commands.insertContent(chunk);
+        fullText += decoder.decode(value, { stream: true });
       }
+
+      // 🚨 AGGRESSIVE SANITIZER: Strip out any hallucinated markdown code blocks!
+      const cleanedText = fullText
+        .replace(/^```html\s*/i, '') // Removes opening ```html
+        .replace(/^```\s*/i, '')     // Removes opening ```
+        .replace(/\s*```$/i, '')     // Removes closing ```
+        .trim();
+
+      // Insert perfectly constructed, sanitized HTML
+      editor.commands.insertContent(cleanedText);
+
     } catch (error) {
       console.error("Inline edit failed:", error);
     } finally {
-      editor.setEditable(true);
-      setIsEditingSelection(false);
-      setEditPrompt('');
+      setIsEditingSelection(false); 
     }
   };
 
@@ -318,6 +384,9 @@ export default function Editor() {
   return (
     <div className="flex h-screen w-screen bg-gray-100 overflow-hidden">
       
+      {/* 🚨 DYNAMIC CSS INJECTION: Hides the Card.tsx "Ask AI" buttons while AI is generating */}
+      <style>{isGlobalLock ? `.group:hover .group-hover\\:opacity-100 { opacity: 0 !important; pointer-events: none !important; }` : ''}</style>
+
       <div className="flex-1 flex flex-col bg-white border-r border-gray-200 shadow-sm z-10 relative">
         <div className="h-14 border-b border-gray-200 bg-white flex items-center px-6 justify-between shrink-0">
           <h1 className="text-lg font-semibold text-gray-800">AI Content Editor</h1>
@@ -333,20 +402,19 @@ export default function Editor() {
           {editor && (
             <BubbleMenu 
               editor={editor} 
+              shouldShow={({ state, from, to }) => !state.selection.empty && from !== to && !isGlobalLock}
               className="flex items-center gap-1 p-1.5 bg-white border border-gray-200 rounded-xl shadow-xl transition-all"
             >
               <button 
                 onClick={() => handleInlineEdit('Rewrite to sound more professional and polished.')}
-                disabled={isEditingSelection}
-                className="px-3 py-1.5 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                className="px-3 py-1.5 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors flex items-center gap-1.5"
               >
                 ✨ Improve
               </button>
               
               <button 
                 onClick={() => handleInlineEdit('Make this significantly shorter and more concise.')}
-                disabled={isEditingSelection}
-                className="px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg disabled:opacity-50 transition-colors"
+                className="px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 ✂️ Shorten
               </button>
@@ -362,12 +430,11 @@ export default function Editor() {
                   placeholder="Ask AI to change this..."
                   value={editPrompt}
                   onChange={e => setEditPrompt(e.target.value)}
-                  disabled={isEditingSelection}
                   className="w-56 px-2 py-1 text-sm border-none focus:ring-0 outline-none bg-transparent placeholder-gray-400"
                 />
                 <button 
                   type="submit" 
-                  disabled={!editPrompt.trim() || isEditingSelection} 
+                  disabled={!editPrompt.trim()} 
                   className="px-3 py-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 font-medium text-sm rounded-lg transition-colors disabled:opacity-50"
                 >
                   Enter ↵
@@ -414,7 +481,6 @@ export default function Editor() {
                 </div>
               ))}
               
-              {/* 🚨 Dynamic UI feedback while image API is running */}
               {isGeneratingImg && (
                 <div className="flex flex-col gap-2 items-start mt-4">
                   <div className="px-4 py-3 rounded-2xl max-w-[85%] text-sm shadow-sm bg-purple-50 border border-purple-100 text-purple-800">
@@ -455,15 +521,14 @@ export default function Editor() {
               onChange={handleFileUpload} 
               accept=".txt,.md,.csv,.json" 
               className="hidden" 
-              disabled={isInputDisabled}
+              disabled={isGlobalLock}
             />
-            {/* 🚨 UPDATED: Disabled state added to the paperclip button */}
             <button 
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              disabled={isInputDisabled}
+              disabled={isGlobalLock}
               className={`p-2 rounded-xl transition-colors shrink-0 ${
-                isInputDisabled 
+                isGlobalLock 
                   ? 'text-gray-300 cursor-not-allowed' 
                   : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
               }`}
@@ -477,15 +542,15 @@ export default function Editor() {
                 type="text"
                 value={promptInput}
                 onChange={(e) => setPromptInput(e.target.value)}
-                disabled={isInputDisabled}
-                placeholder={isInputDisabled ? "Waiting for tasks to finish..." : "Ask the AI to write or edit..."}
+                disabled={isGlobalLock}
+                placeholder={isGlobalLock ? "Waiting for tasks to finish..." : "Ask the AI to write or edit..."}
                 className={`w-full pl-4 pr-10 py-3 rounded-xl border border-gray-200 outline-none transition-all text-sm ${
-                  isInputDisabled ? 'opacity-50 cursor-not-allowed bg-gray-100' : 'bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
+                  isGlobalLock ? 'opacity-50 cursor-not-allowed bg-gray-100' : 'bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
                 }`}
               />
               <button 
                 type="submit"
-                disabled={isInputDisabled || !promptInput.trim()}
+                disabled={isGlobalLock || !promptInput.trim()}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm"
               >
                 ↑

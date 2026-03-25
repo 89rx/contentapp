@@ -12,6 +12,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { ColumnBlock, Column } from './extensions/Columns';
+import { DocumentCard } from './extensions/Card'; 
 
 // --- TABLE IMPORTS ---
 import { Table } from '@tiptap/extension-table';
@@ -19,7 +20,6 @@ import { TableRow } from '@tiptap/extension-table-row';
 import { TableHeader } from '@tiptap/extension-table-header';
 import { TableCell } from '@tiptap/extension-table-cell';
 
-// --- EXACT CUSTOM TABLE CELL FROM DOCS ---
 const CustomTableCell = TableCell.extend({
   addAttributes() {
     return {
@@ -48,6 +48,9 @@ export default function Editor() {
   const [editPrompt, setEditPrompt] = useState('');
   const [isEditingSelection, setIsEditingSelection] = useState(false);
 
+  // 🚨 NEW: Tracks if the image API is running to disable input!
+  const [isGeneratingImg, setIsGeneratingImg] = useState(false);
+
   const [attachment, setAttachment] = useState<{name: string, content: string} | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null); 
   
@@ -56,26 +59,24 @@ export default function Editor() {
   const editor = useEditor({
     extensions: [
       StarterKit, 
-      Markdown, 
+      Markdown.configure({ html: true }), 
       Highlight, 
       Typography, 
       Image,
-      // TABLE CONFIGURATION (Using CustomTableCell)
-      Table.configure({
-        resizable: true,
-      }),
+      Table.configure({ resizable: true }),
       TableRow,
       TableHeader,
       CustomTableCell,
-      ColumnBlock, // NEW
-      Column,
+      ColumnBlock, 
+      Column,      
+      DocumentCard, 
     ], 
-    content: '<h1>Highlight me and ask the AI to change me!</h1><p>This is some example text to test the bubble menu iteration feature.</p>',
+    content: `<div data-type="card"><div data-type="columns"><div data-type="column"><h1>The World of Birds</h1><h2>Graceful, diverse, and endlessly fascinating—birds bring color, movement, and song to every corner of the natural world.</h2><p><strong>by Ayan</strong><br><span class="text-gray-500">Last edited about 23 hours ago</span></p></div><div data-type="column"><img src="https://image.pollinations.ai/prompt/Minimalist%20minimalist%20minimalist%20editorial%20design%20aesthetic%20photo%20of%20a%20modern%20editorial%20workspace%20with%20a%20blank%20Macbook%20on%20a%20wooden%20desk%20and%20a%20large%20plant%20in%20soft%20daylight" alt="Editorial Workspace" class="w-full h-full object-cover rounded-xl shadow-sm border border-gray-100" /></div></div></div><div data-type="card"><p>This is your Content Card. Ask the AI to write a blog post, and it will automatically generate the text layout first, followed seamlessly by the image stream!</p></div>`,
     editable: true,
     immediatelyRender: false,
     editorProps: {
       attributes: { 
-        class: 'prose prose-lg focus:outline-none max-w-3xl mx-auto py-10 px-8 h-full min-h-[800px]',
+        class: 'prose prose-lg focus:outline-none max-w-none min-h-[800px]',
         spellcheck: 'false' 
       },
     },
@@ -88,26 +89,28 @@ export default function Editor() {
   });
 
   const isLoading = status === 'submitted' || status === 'streaming';
+  
+  // 🚨 COMBINED LOCK: True if Text is writing OR Image is streaming
+  const isInputDisabled = isLoading || isGeneratingImg;
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
+  // --- 1. THE MESSAGE LISTENER (PURE TEXT STREAMING) ---
   useEffect(() => {
     if (!editor || messages.length === 0) return;
+
     const latestMessage = messages[messages.length - 1];
-    
     if (latestMessage.role === 'assistant') {
       setTimeout(() => {
-        latestMessage.parts.forEach(part => {
+        latestMessage.parts.forEach((part) => {
           if (part.type === 'text') {
             const fullText = part.text || '';
             const docStartIndex = fullText.indexOf('<DOC>');
             
             if (docStartIndex !== -1) {
-              if (!isWritingDoc.current) {
-                isWritingDoc.current = true;
-              }
+              if (!isWritingDoc.current) isWritingDoc.current = true;
               let docContent = fullText.slice(docStartIndex + 5);
               docContent = docContent.replace('</DOC>', ''); 
               editor.commands.setContent(docContent);
@@ -117,6 +120,107 @@ export default function Editor() {
       }, 0); 
     }
   }, [messages, editor]);
+
+  // --- 2. THE SEQUENTIAL TRIGGER (HTML DOM SCRAPER) ---
+  useEffect(() => {
+    // When text stops streaming, check the canvas for a pending image!
+    if (!isLoading && editor) {
+      
+      let targetPos: number | null = null;
+      let promptToGenerate: string | null = null;
+
+      editor.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'image' && node.attrs.title === 'pending-generation') {
+          targetPos = pos;
+          promptToGenerate = node.attrs.alt; 
+          return false; // Stop traversing once found
+        }
+      });
+
+      if (targetPos !== null && promptToGenerate) {
+        console.log(`🎯 [TRIGGER] Text done! Found pending image prompt: "${promptToGenerate}"`);
+
+        // 🚨 LOCK THE INPUT FIELD
+        setIsGeneratingImg(true);
+
+        editor.commands.command(({ tr, dispatch }) => {
+          if (dispatch) {
+            const node = editor.state.doc.nodeAt(targetPos!);
+            if (node) tr.setNodeMarkup(targetPos!, null, { ...node.attrs, title: 'generating' });
+          }
+          return true;
+        });
+
+        // Fire your background streaming API
+        fetch('/api/generate-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: promptToGenerate })
+        })
+        .then(async (res) => {
+          if (!res.body) throw new Error("No response body");
+          
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            let boundary = buffer.indexOf('\n\n');
+
+            while (boundary !== -1) {
+              const msg = buffer.slice(0, boundary);
+              buffer = buffer.slice(boundary + 2);
+
+              if (msg.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(msg.slice(6));
+                  
+                  if (data.url && editor) {
+                    editor.commands.command(({ tr, dispatch }) => {
+                      let found = false;
+                      editor.state.doc.descendants((node, pos) => {
+                        if (node.type.name === 'image' && node.attrs.title === 'generating') {
+                          // The Base64 string overwrites the SVG spinner immediately!
+                          if (dispatch) tr.setNodeMarkup(pos, null, { ...node.attrs, src: data.url });
+                          found = true;
+                          return false; 
+                        }
+                      });
+                      return found;
+                    });
+                  }
+                } catch (e) {
+                  // Ignore fragmented JSON chunks
+                }
+              }
+              boundary = buffer.indexOf('\n\n');
+            }
+          }
+        })
+        .finally(() => {
+          // 🚨 UNLOCK THE INPUT FIELD
+          setIsGeneratingImg(false);
+          
+          editor.commands.command(({ tr, dispatch }) => {
+            let found = false;
+            editor.state.doc.descendants((node, pos) => {
+              if (node.type.name === 'image' && node.attrs.title === 'generating') {
+                if (dispatch) tr.setNodeMarkup(pos, null, { ...node.attrs, title: null });
+                found = true;
+                return false; 
+              }
+            });
+            return found;
+          });
+        })
+        .catch(err => console.error("🚨 [FETCH ERROR]:", err));
+      }
+    }
+  }, [isLoading, editor]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -133,24 +237,34 @@ export default function Editor() {
       setAttachment({ name: file.name, content });
     };
     reader.readAsText(file);
-    
     e.target.value = ''; 
+  };
+
+  const getStructuredContext = () => {
+    let contextString = '';
+    let cardIndex = 0;
+    editor?.state.doc.forEach((node) => {
+      if (node.type.name === 'documentCard') {
+        contextString += `--- CARD INDEX: ${cardIndex} ---\n${node.textContent}\n\n`;
+        cardIndex++;
+      }
+    });
+    return contextString || editor?.getText();
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!promptInput.trim() || isLoading || !editor) return;
+    if (!promptInput.trim() || isInputDisabled || !editor) return;
     isWritingDoc.current = false; 
     
     sendMessage(
       { text: promptInput }, 
       { body: { 
-          documentContext: editor.getText(),
+          documentContext: getStructuredContext(), 
           referenceContext: attachment?.content || '' 
         } 
       }
     ); 
-    
     setPromptInput('');
   };
 
@@ -162,10 +276,8 @@ export default function Editor() {
 
   const handleInlineEdit = async (actionPrompt: string) => {
     if (!editor) return;
-    
     const { from, to } = editor.state.selection;
     const selectedText = editor.state.doc.textBetween(from, to, '\n');
-    
     if (!selectedText) return;
 
     setIsEditingSelection(true);
@@ -179,7 +291,6 @@ export default function Editor() {
       });
 
       if (!response.body) throw new Error('No response body');
-
       editor.commands.deleteSelection();
 
       const reader = response.body.getReader();
@@ -188,7 +299,6 @@ export default function Editor() {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        
         const chunk = decoder.decode(value);
         editor.commands.insertContent(chunk);
       }
@@ -218,7 +328,7 @@ export default function Editor() {
         
         <MenuBar editor={editor} />
         
-        <div className="flex-1 overflow-y-auto relative">
+        <div className="flex-1 overflow-y-auto relative bg-gray-50 pt-8 pb-32 px-4">
           
           {editor && (
             <BubbleMenu 
@@ -276,27 +386,49 @@ export default function Editor() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
-          {messages.length === 0 ? (
+        {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-gray-400 space-y-2">
               <p className="text-sm text-center">I'm ready to help you write.<br/>What are we working on today?</p>
             </div>
           ) : (
-            messages.map((message) => (
-              <div key={message.id} className={`flex flex-col ${message.role === 'user' ? 'items-end' : 'items-start'}`}>
-                <div className={`px-4 py-3 rounded-2xl max-w-[85%] text-sm shadow-sm ${
-                  message.role === 'user' 
-                    ? 'bg-blue-600 text-white rounded-tr-sm' 
-                    : 'bg-white border border-gray-200 text-gray-800 rounded-tl-sm'
-                }`}>
+            <>
+              {messages.map((message) => (
+                <div key={message.id} className={`flex flex-col gap-2 ${message.role === 'user' ? 'items-end' : 'items-start'}`}>
                   {message.parts.map((part, index) => {
                      if (part.type === 'text') {
-                       return <span key={index} className="whitespace-pre-wrap leading-relaxed">{renderChatMessage(part.text)}</span>;
+                       const textContent = renderChatMessage(part.text);
+                       if (!textContent) return null; 
+                       
+                       return (
+                          <div key={index} className={`px-4 py-3 rounded-2xl max-w-[85%] text-sm shadow-sm ${
+                            message.role === 'user' 
+                              ? 'bg-blue-600 text-white rounded-tr-sm' 
+                              : 'bg-white border border-gray-200 text-gray-800 rounded-tl-sm'
+                          }`}>
+                            <span className="whitespace-pre-wrap leading-relaxed">{textContent}</span>
+                          </div>
+                       );
                      }
                      return null;
                   })}
                 </div>
-              </div>
-            ))
+              ))}
+              
+              {/* 🚨 Dynamic UI feedback while image API is running */}
+              {isGeneratingImg && (
+                <div className="flex flex-col gap-2 items-start mt-4">
+                  <div className="px-4 py-3 rounded-2xl max-w-[85%] text-sm shadow-sm bg-purple-50 border border-purple-100 text-purple-800">
+                    <span className="flex items-center gap-2 font-mono text-xs">
+                      <span className="text-lg animate-pulse">🎨</span>
+                      <span>
+                        <strong className="block text-purple-900">Cover Artwork Queued</strong>
+                        Painting your high-res asset...
+                      </span>
+                    </span>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -323,11 +455,18 @@ export default function Editor() {
               onChange={handleFileUpload} 
               accept=".txt,.md,.csv,.json" 
               className="hidden" 
+              disabled={isInputDisabled}
             />
+            {/* 🚨 UPDATED: Disabled state added to the paperclip button */}
             <button 
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="p-2 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-xl transition-colors shrink-0"
+              disabled={isInputDisabled}
+              className={`p-2 rounded-xl transition-colors shrink-0 ${
+                isInputDisabled 
+                  ? 'text-gray-300 cursor-not-allowed' 
+                  : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
+              }`}
               title="Attach context file (Max 2MB)"
             >
               📎
@@ -338,13 +477,15 @@ export default function Editor() {
                 type="text"
                 value={promptInput}
                 onChange={(e) => setPromptInput(e.target.value)}
-                disabled={isLoading}
-                placeholder="Ask the AI to write or edit..."
-                className="w-full pl-4 pr-10 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all disabled:opacity-60 bg-gray-50 focus:bg-white text-sm"
+                disabled={isInputDisabled}
+                placeholder={isInputDisabled ? "Waiting for tasks to finish..." : "Ask the AI to write or edit..."}
+                className={`w-full pl-4 pr-10 py-3 rounded-xl border border-gray-200 outline-none transition-all text-sm ${
+                  isInputDisabled ? 'opacity-50 cursor-not-allowed bg-gray-100' : 'bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
+                }`}
               />
               <button 
                 type="submit"
-                disabled={isLoading || !promptInput.trim()}
+                disabled={isInputDisabled || !promptInput.trim()}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm"
               >
                 ↑

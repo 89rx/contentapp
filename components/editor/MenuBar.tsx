@@ -48,7 +48,6 @@ export const MenuBar = ({ editor }: { editor: Editor | null }) => {
       <div className="w-px h-5 bg-gray-300 mx-1" />
 
       <button onClick={() => editor.chain().focus().toggleBulletList().run()} className={btn(editorState.isBulletList)}>• List</button>
-      <button onClick={() => editor.chain().focus().toggleOrderedList().run()} className={btn(editorState.isOrderedList)}>1. List</button>
       <button onClick={() => editor.chain().focus().toggleBlockquote().run()} className={btn(editorState.isBlockquote)}>Quote</button>
       
       <div className="w-px h-5 bg-gray-300 mx-1" />
@@ -57,7 +56,6 @@ export const MenuBar = ({ editor }: { editor: Editor | null }) => {
         🖼️ Image
       </button>
 
-      {/* FIXED: Columns now highlight using the selector */}
       <button 
         onClick={() => editor.chain().focus().insertContent('<div data-type="columns"><div data-type="column"><p>Left Column</p></div><div data-type="column"><p>Right Column</p></div></div>').run()} 
         className={btn(editorState.isColumns)}
@@ -68,7 +66,6 @@ export const MenuBar = ({ editor }: { editor: Editor | null }) => {
 
       <div className="w-px h-5 bg-gray-300 mx-1" />
       
-      {/* FIXED: Table highlights using the selector */}
       <button 
         onClick={() => (editor.chain().focus() as any).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} 
         className={btn(editorState.isTable)}
@@ -77,7 +74,6 @@ export const MenuBar = ({ editor }: { editor: Editor | null }) => {
         ▦ Table
       </button>
 
-      {/* FIXED: Dynamic controls toggle based on the state selector */}
       {editorState.isTable && (
         <div className="flex items-center gap-1 bg-gray-50 p-0.5 rounded-lg border border-gray-200">
           <button onClick={() => (editor.chain().focus() as any).addRowAfter().run()} className="px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200 rounded">

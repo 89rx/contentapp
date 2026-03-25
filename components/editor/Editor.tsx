@@ -13,6 +13,8 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { ColumnBlock, Column } from './extensions/Columns';
 import { DocumentCard } from './extensions/Card'; 
+import { ExportDialog } from './ExportDialog';
+import Document from '@tiptap/extension-document';
 
 // --- TABLE IMPORTS ---
 import { Table } from '@tiptap/extension-table';
@@ -41,9 +43,17 @@ const CustomTableCell = TableCell.extend({
   },
 });
 
+// 🚨 STRICT SCHEMA: The root document is locked to ONLY contain cards.
+const CustomDocument = Document.extend({
+  content: 'documentCard+',
+});
+
 export default function Editor() {
   const [isMounted, setIsMounted] = useState(false);
   const [promptInput, setPromptInput] = useState('');
+
+  // 2. Add the modal state
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   
   const [editPrompt, setEditPrompt] = useState('');
   const [isEditingSelection, setIsEditingSelection] = useState(false);
@@ -58,7 +68,10 @@ export default function Editor() {
 
   const editor = useEditor({
     extensions: [
-      StarterKit, 
+      CustomDocument, // 🚨 1. Inject the strict schema
+      StarterKit.configure({
+        document: false, // 🚨 2. Disable the default loose schema
+      }),
       Markdown.configure({ html: true }), 
       Highlight, 
       Typography, 
@@ -71,6 +84,7 @@ export default function Editor() {
       Column,      
       DocumentCard, 
     ], 
+    // ... rest of your config remains the same
     content: `<div data-type="card"><div data-type="columns"><div data-type="column"><h1>The World of Birds</h1><h2>Graceful, diverse, and endlessly fascinating—birds bring color, movement, and song to every corner of the natural world.</h2></div><div data-type="column"><img src="https://image.pollinations.ai/prompt/Minimalist%20minimalist%20minimalist%20editorial%20design%20aesthetic%20photo%20of%20a%20modern%20editorial%20workspace%20with%20a%20blank%20Macbook%20on%20a%20wooden%20desk%20and%20a%20large%20plant%20in%20soft%20daylight" alt="Editorial Workspace" class="w-full h-full object-cover rounded-xl shadow-sm border border-gray-100" /></div></div></div><div data-type="card"><p>This is your Content Card. Ask the AI to write a blog post, and it will automatically generate the text layout first, followed seamlessly by the image stream!</p></div>`,
     editable: true,
     immediatelyRender: false,
@@ -121,6 +135,8 @@ export default function Editor() {
               if (!isWritingDoc.current) isWritingDoc.current = true;
               let docContent = fullText.slice(docStartIndex + 5);
               docContent = docContent.replace('</DOC>', ''); 
+
+              docContent = docContent.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
               editor.commands.setContent(docContent);
             }
           }
@@ -365,6 +381,7 @@ export default function Editor() {
         .replace(/^```html\s*/i, '') // Removes opening ```html
         .replace(/^```\s*/i, '')     // Removes opening ```
         .replace(/\s*```$/i, '')     // Removes closing ```
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // 🚨 Force asterisks to <strong> tags
         .trim();
 
       // Insert perfectly constructed, sanitized HTML
@@ -383,16 +400,35 @@ export default function Editor() {
 
   return (
     <div className="flex h-screen w-screen bg-gray-100 overflow-hidden">
+
+<ExportDialog
+  isOpen={isExportDialogOpen}
+  onClose={() => setIsExportDialogOpen(false)}
+  documentTitle="Your Document Title"
+  editor={editor}
+/>
       
       {/* 🚨 DYNAMIC CSS INJECTION: Hides the Card.tsx "Ask AI" buttons while AI is generating */}
       <style>{isGlobalLock ? `.group:hover .group-hover\\:opacity-100 { opacity: 0 !important; pointer-events: none !important; }` : ''}</style>
 
       <div className="flex-1 flex flex-col bg-white border-r border-gray-200 shadow-sm z-10 relative">
         <div className="h-14 border-b border-gray-200 bg-white flex items-center px-6 justify-between shrink-0">
-          <h1 className="text-lg font-semibold text-gray-800">AI Content Editor</h1>
-          <span className="text-xs font-medium px-2.5 py-1 bg-purple-100 text-purple-800 rounded-full border border-purple-200">
-            Context-Aware Mode
-          </span>
+          
+          {/* Left Side: Title & Badge */}
+          <div className="flex items-center gap-3">
+            <h1 className="text-lg font-semibold text-gray-800">AI Content Editor</h1>
+            <span className="text-xs font-medium px-2.5 py-1 bg-purple-100 text-purple-800 rounded-full border border-purple-200">
+              Context-Aware Mode
+            </span>
+          </div>
+
+          {/* 🚨 NEW: The Share Button */}
+          <button 
+            onClick={() => setIsExportDialogOpen(true)}
+            className="flex items-center gap-2 px-4 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-full hover:bg-blue-700 transition-colors shadow-sm"
+          >
+            Export
+          </button>
         </div>
         
         <MenuBar editor={editor} />

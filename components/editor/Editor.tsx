@@ -144,8 +144,6 @@ export default function Editor({ config }: { config: ContentTypeDefinition }) {
 
   // --- 2. THE UNIVERSAL MULTI-IMAGE SCANNER ---
   useEffect(() => {
-    // 🚨 CRITICAL FIX: Do not run the scanner while the AI is streaming text.
-    // Wait until the text is completely finished rendering!
     if (!editor || isLoading) return; 
 
     let isProcessing = false;
@@ -262,16 +260,34 @@ export default function Editor({ config }: { config: ContentTypeDefinition }) {
         });
 
         isProcessing = false;
-        // Recursively check if there are any MORE pending images
         processImages();
       }
     };
 
-    // 🚨 We removed editor.on('update'). 
-    // It now only runs once when isLoading changes to false!
     processImages();
 
-  }, [editor, isLoading]); // <-- Dependency array now watches isLoading!
+    // 🚨 1. Listen for standard document updates
+    const handleUpdate = () => {
+      if (!isProcessing && !isLoading) {
+        processImages();
+      }
+    };
+    editor.on('update', handleUpdate);
+
+    // 🚨 2. Listen for manual triggers from our Edit routes
+    const handleCustomTrigger = () => {
+      if (!isProcessing && !isLoading) {
+        processImages();
+      }
+    };
+    window.addEventListener('editor:trigger-image-scan', handleCustomTrigger);
+
+    return () => {
+      editor.off('update', handleUpdate);
+      window.removeEventListener('editor:trigger-image-scan', handleCustomTrigger);
+    };
+
+  }, [editor, isLoading]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -326,6 +342,7 @@ export default function Editor({ config }: { config: ContentTypeDefinition }) {
     return text;
   };
 
+  // --- 🚨 FIXED INLINE EDIT HANDLER ---
   const handleInlineEdit = async (actionPrompt: string) => {
     if (!editor) return;
     const { from, to } = editor.state.selection;
@@ -342,33 +359,47 @@ export default function Editor({ config }: { config: ContentTypeDefinition }) {
         body: JSON.stringify({ 
           prompt: actionPrompt, 
           selectedText,
-          // 🚨 SEND THE CONTEXT-AWARE PROMPT!
           systemInstruction: config.aiBehavior.inlineEditPrompt 
         })
       });
 
       if (!response.body) throw new Error('No response body');
       
-      editor.commands.deleteSelection();
-
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+      
       let fullText = '';
+      let currentEndPos = to; // Keep track of the expanding text boundary
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         fullText += decoder.decode(value, { stream: true });
+
+        const cleanedText = fullText
+          .replace(/^```html\s*/i, '') 
+          .replace(/^```\s*/i, '')     
+          .replace(/\s*```$/i, '')     
+          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') 
+          .trim();
+
+        // 🚨 Safe Streaming Replacement (Try/Catch prevents TipTap from crashing on partial HTML)
+        try {
+          editor.chain()
+            .setTextSelection({ from, to: currentEndPos })
+            .insertContent(cleanedText)
+            .run();
+            
+          // Update the boundary to the end of the newly inserted text
+          currentEndPos = editor.state.selection.to; 
+        } catch (error) {
+          // Ignore incomplete HTML parse errors during the stream
+        }
       }
+      
+      // 🚨 Trigger the image scanner in case the AI added a new image tag!
+      window.dispatchEvent(new CustomEvent('editor:trigger-image-scan'));
 
-      const cleanedText = fullText
-        .replace(/^```html\s*/i, '') 
-        .replace(/^```\s*/i, '')     
-        .replace(/\s*```$/i, '')     
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') 
-        .trim();
-
-      editor.commands.insertContent(cleanedText);
     } catch (error) {
       console.error("Inline edit failed:", error);
     } finally {
@@ -390,7 +421,6 @@ export default function Editor({ config }: { config: ContentTypeDefinition }) {
         config={config} 
       />
       
-      {/* 🚨 THE SAFE LAYOUT CSS FIX */}
       <style>{`
         ${isGlobalLock ? `.group:hover .group-hover\\:opacity-100 { opacity: 0 !important; pointer-events: none !important; }` : ''}
 
@@ -494,7 +524,6 @@ export default function Editor({ config }: { config: ContentTypeDefinition }) {
         `}
       `}</style>
 
-      {/* ... The rest of the UI structure remains completely identical ... */}
       <div className="flex-1 flex flex-col bg-white border-r border-gray-200 shadow-sm z-10 relative">
         <div className="h-14 border-b border-gray-200 bg-white flex items-center px-6 justify-between shrink-0">
           <div className="flex items-center gap-3">

@@ -79,12 +79,38 @@ export const ContentRegistry: Record<string, ContentTypeDefinition> = {
       
       ${GLOBAL_AI_RULES}`,
 
-      inlineEditPrompt: `You are an expert copy editor formatting text for a professional Presentation Document. 
-      CRITICAL RULES:
-      1. Revise the text EXACTLY according to the instruction.
-      2. OUTPUT ONLY THE REVISED TEXT. No conversational filler.
-      3. PURE HTML ONLY (NO MARKDOWN). Output valid HTML tags.
-      ${INLINE_IMAGE_RULE}`,
+      inlineEditPrompt: `You are an expert AI copy editor. Your job is to rewrite or modify the specific content of a single document card based on the user's instructions.
+
+      CRITICAL RULES FOR OUTPUTTING TEXT:
+      1. PURE HTML FORMATTING: NEVER use Markdown formatting. NO whitespace indentation for tags (TipTap breaks if you indent HTML).
+      2. ONLY THE CONTENT: Do NOT output the <DOC> tags or <div data-type="card"> wrapper. ONLY output the inner HTML content.
+      3. NO CONVERSATION: Output ONLY the finalized HTML. No conversational filler, no \`\`\`html code blocks.
+
+      DEFAULT FORMATTING (Use this for standard text edits):
+      - Use normal HTML tags flowing from top to bottom: <h1>, <h2>, <h3>, <p>, <ul>, <ol>, <li>.
+      - Example Output:
+      <h1>Main Heading</h1>
+      <p>This is a standard paragraph flowing normally.</p>
+
+      CONDITIONAL FORMATTING (Apply ONLY IF specifically requested by the user):
+
+      - IF COLUMNS ARE REQUESTED:
+      Use this exact un-indented structure:
+<div data-type="columns">
+<div data-type="column">
+<p>Left side content</p>
+</div>
+<div data-type="column">
+<p>Right side content</p>
+</div>
+</div>
+      
+      - IF A TABLE IS REQUESTED:
+      Use standard un-indented HTML: <table>, <thead>, <tbody>, <tr>, <th>, and <td>.
+
+      - IF AN IMAGE IS REQUESTED:
+      Place the image AT THE VERY END of the card content, strictly below all paragraphs. Use exactly this tag:
+<img src="https://placehold.co/800x800/f4f4f5/a855f7.png?text=Generating+Artwork...+%E2%9C%A8" alt="[Write a highly descriptive image prompt here]" title="pending-generation" class="w-full h-full object-cover rounded-xl shadow-sm" />`,
     },
     canvasConstraints: { 
       width: '1280px', 

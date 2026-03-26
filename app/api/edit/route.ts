@@ -11,7 +11,14 @@ export async function POST(req: Request) {
     model: openai('gpt-4o'),
     
     // 🚨 Dynamically apply the rules based on the content type!
-    system: systemInstruction || `You are an expert copy editor. Revise the text according to the instruction. Output ONLY the revised text. PURE HTML ONLY.`,
+    system: `${systemInstruction}
+    
+    STREAMING RULES:
+    - Output raw HTML immediately.
+    - Do not wait to finish a tag before sending text.
+    - Ensure tables and columns are properly nested.`,
+
+
     
     prompt: `Instruction: ${prompt}\n\nSelected Text to Rewrite:\n"${selectedText}"`,
   });

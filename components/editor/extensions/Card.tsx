@@ -1,6 +1,7 @@
 import { Node, mergeAttributes } from '@tiptap/core';
 import { ReactNodeViewRenderer, NodeViewWrapper, NodeViewContent } from '@tiptap/react';
 import { useState } from 'react';
+import { ContentRegistry } from '@/lib/core/content-types';
 
 const CardComponent = (props: any) => {
   const [showPrompt, setShowPrompt] = useState(false);
@@ -17,53 +18,64 @@ const CardComponent = (props: any) => {
     const initialFrom = props.getPos() + 1;
     const initialTo = props.getPos() + props.node.nodeSize - 1;
     
-    // 🚨 NEW: Show a safe, native loading state instead of live-streaming incomplete HTML!
     props.editor.chain()
       .deleteRange({ from: initialFrom, to: initialTo })
       .insertContentAt(initialFrom, '<p class="text-purple-600 animate-pulse font-medium">✨ AI is rewriting this card...</p>')
       .run();
 
     try {
+      // 🚨 1. dynamically grab the correct instructions based on the URL
+      const typeMatch = window.location.pathname.match(/\/editor\/([^/]+)/);
+      const type = typeMatch ? typeMatch[1] : 'document';
+      const config = ContentRegistry[type];
+      const systemInstruction = config?.aiBehavior.inlineEditPrompt || '';
+
       const response = await fetch('/api/edit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: promptInput, selectedText })
+        // 🚨 2. We are now actually sending the instructions!
+        body: JSON.stringify({ prompt: promptInput, selectedText, systemInstruction })
       });
 
       if (!response.body) throw new Error('No response body');
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      
       let fullText = '';
 
-      // 🚨 NEW: Buffer the text completely before touching TipTap
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         fullText += decoder.decode(value, { stream: true });
+
+        const cleanedText = fullText
+          .replace(/^```html\s*/i, '')
+          .replace(/^```\s*/i, '')
+          .replace(/\s*```$/i, '')
+          .trim();
+
+        const pos = props.getPos();
+        const currentNode = props.editor.state.doc.nodeAt(pos);
+
+        if (currentNode && currentNode.type.name === 'documentCard') {
+          const currentFrom = pos + 1;
+          const currentTo = pos + currentNode.nodeSize - 1;
+
+          // 🚨 3. The Try/Catch shield: Ignores TipTap errors when HTML tags are half-streamed
+          try {
+            props.editor.chain()
+              .deleteRange({ from: currentFrom, to: currentTo })
+              .insertContentAt(currentFrom, cleanedText)
+              .run();
+          } catch (error) {
+            // Silently skip this tick. It will succeed on the next tick once the AI closes the HTML tag!
+          }
+        }
       }
+      
+      // 🚨 4. Wake up the image scanner!
+      window.dispatchEvent(new CustomEvent('editor:trigger-image-scan'));
 
-      // 🚨 NEW: Aggressively strip any hallucinated markdown blocks
-      const cleanedText = fullText
-        .replace(/^```html\s*/i, '')
-        .replace(/^```\s*/i, '')
-        .replace(/\s*```$/i, '')
-        .trim();
-
-      const pos = props.getPos();
-      const currentNode = props.editor.state.doc.nodeAt(pos);
-
-      if (currentNode && currentNode.type.name === 'documentCard') {
-        const from = pos + 1;
-        const to = pos + currentNode.nodeSize - 1;
-
-        // Insert the perfectly formed HTML all at once
-        props.editor.chain()
-          .deleteRange({ from, to })
-          .insertContentAt(from, cleanedText)
-          .run();
-      }
     } catch (error) {
       console.error("Card AI Edit failed:", error);
     } finally {
@@ -85,7 +97,7 @@ const CardComponent = (props: any) => {
       {/* --- FLOATING HOVER CONTROLS (Keep these exactly the same) --- */}
       <div 
         contentEditable={false}
-        className="absolute -bottom-5 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex items-center gap-1 bg-white border border-gray-200 shadow-sm rounded-lg p-1 z-10"
+        className="absolute bottom-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex! flex-row! items-center gap-1 bg-white border border-gray-200 shadow-sm rounded-lg p-1 z-50 w-max"
       >
         {/* The New Ask AI Button */}
         <button

@@ -74,14 +74,17 @@ const CardComponent = (props: any) => {
   };
 
   return (
-    <NodeViewWrapper className="group relative bg-white p-8 sm:p-12 rounded-2xl shadow-sm border border-gray-200 mb-8 w-full max-w-3xl mx-auto transition-all hover:border-blue-300 hover:shadow-md">
+    <NodeViewWrapper 
+      data-type="card" // 🚨 CRITICAL: This lets Editor.tsx target it dynamically!
+      className="group relative bg-white rounded-2xl shadow-sm border border-gray-200 mb-8 mx-auto transition-all hover:border-blue-300 hover:shadow-md overflow-hidden flex flex-col"
+    >
       
-      {/* The actual editable document text goes here */}
-      <NodeViewContent className="min-h-[2rem] focus:outline-none" />
+      {/* 🚨 Removed 'min-h-[2rem]' so it respects our dynamic aspect-ratio */}
+      <NodeViewContent className="focus:outline-none flex-1 flex flex-col" />
 
-      {/* --- FLOATING HOVER CONTROLS --- */}
+      {/* --- FLOATING HOVER CONTROLS (Keep these exactly the same) --- */}
       <div 
-        contentEditable={false} 
+        contentEditable={false}
         className="absolute -bottom-5 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex items-center gap-1 bg-white border border-gray-200 shadow-sm rounded-lg p-1 z-10"
       >
         {/* The New Ask AI Button */}

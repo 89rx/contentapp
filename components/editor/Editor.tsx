@@ -16,6 +16,8 @@ import { DocumentCard } from './extensions/Card';
 import { ExportDialog } from './ExportDialog';
 import Document from '@tiptap/extension-document';
 
+import { ContentTypeDefinition } from '@/lib/core/content-types';
+
 // --- TABLE IMPORTS ---
 import { Table } from '@tiptap/extension-table';
 import { TableRow } from '@tiptap/extension-table-row';
@@ -43,35 +45,29 @@ const CustomTableCell = TableCell.extend({
   },
 });
 
-// 🚨 STRICT SCHEMA: The root document is locked to ONLY contain cards.
 const CustomDocument = Document.extend({
   content: 'documentCard+',
 });
 
-export default function Editor() {
+export default function Editor({ config }: { config: ContentTypeDefinition }) {
   const [isMounted, setIsMounted] = useState(false);
   const [promptInput, setPromptInput] = useState('');
-
-  // 2. Add the modal state
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
-  
   const [editPrompt, setEditPrompt] = useState('');
   const [isEditingSelection, setIsEditingSelection] = useState(false);
-
-  // 🚨 UI LOCK STATES
   const [isGeneratingImg, setIsGeneratingImg] = useState(false);
-
   const [attachment, setAttachment] = useState<{name: string, content: string} | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null); 
   
+  const fileInputRef = useRef<HTMLInputElement>(null); 
   const isWritingDoc = useRef(false);
+  
+  // 🚨 THE DOUBLE-FETCH SHIELD: React Strict Mode persists this across mounts
+  const isProcessingImg = useRef(false); 
 
   const editor = useEditor({
     extensions: [
-      CustomDocument, // 🚨 1. Inject the strict schema
-      StarterKit.configure({
-        document: false, // 🚨 2. Disable the default loose schema
-      }),
+      CustomDocument, 
+      StarterKit.configure({ document: false }),
       Markdown.configure({ html: true }), 
       Highlight, 
       Typography, 
@@ -84,13 +80,12 @@ export default function Editor() {
       Column,      
       DocumentCard, 
     ], 
-    // ... rest of your config remains the same
-    content: `<div data-type="card"><div data-type="columns"><div data-type="column"><h1>The World of Birds</h1><h2>Graceful, diverse, and endlessly fascinating—birds bring color, movement, and song to every corner of the natural world.</h2></div><div data-type="column"><img src="https://image.pollinations.ai/prompt/Minimalist%20minimalist%20minimalist%20editorial%20design%20aesthetic%20photo%20of%20a%20modern%20editorial%20workspace%20with%20a%20blank%20Macbook%20on%20a%20wooden%20desk%20and%20a%20large%20plant%20in%20soft%20daylight" alt="Editorial Workspace" class="w-full h-full object-cover rounded-xl shadow-sm border border-gray-100" /></div></div></div><div data-type="card"><p>This is your Content Card. Ask the AI to write a blog post, and it will automatically generate the text layout first, followed seamlessly by the image stream!</p></div>`,
+    content: `<div data-type="card"><h1>Untitled ${config.name}</h1><p>Ask the AI to generate your ${config.name.toLowerCase()} or start typing...</p></div>`,
     editable: true,
     immediatelyRender: false,
     editorProps: {
       attributes: { 
-        class: 'prose prose-lg focus:outline-none max-w-none min-h-[800px]',
+        class: 'prose prose-lg focus:outline-none max-w-none min-h-[800px] pb-32',
         spellcheck: 'false' 
       },
     },
@@ -104,22 +99,19 @@ export default function Editor() {
 
   const isLoading = status === 'submitted' || status === 'streaming';
   const isInputDisabled = isLoading || isGeneratingImg;
-  
-  // 🚨 MASTER LOCK: True if ANY AI process (Chat, Image, or Inline Edit) is running
   const isGlobalLock = isInputDisabled || isEditingSelection;
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
-  // 🚨 ENFORCE EDITOR READ-ONLY STATE DURING GENERATION
   useEffect(() => {
     if (editor && editor.isEditable === isGlobalLock) {
       editor.setEditable(!isGlobalLock);
     }
   }, [isGlobalLock, editor]);
 
-  // --- 1. THE MESSAGE LISTENER (PURE TEXT STREAMING) ---
+  // --- 1. THE MESSAGE LISTENER (PURE HTML STREAMING) ---
   useEffect(() => {
     if (!editor || messages.length === 0) return;
 
@@ -133,11 +125,16 @@ export default function Editor() {
             
             if (docStartIndex !== -1) {
               if (!isWritingDoc.current) isWritingDoc.current = true;
+              
               let docContent = fullText.slice(docStartIndex + 5);
               docContent = docContent.replace('</DOC>', ''); 
 
+              // Anti-hallucination markdown stripper
+              docContent = docContent.replace(/^```html\s*/i, '');
+              docContent = docContent.replace(/```$/i, '');
               docContent = docContent.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-              editor.commands.setContent(docContent);
+              
+              editor.commands.setContent(docContent.trim());
             }
           }
         });
@@ -147,28 +144,24 @@ export default function Editor() {
 
   // --- 2. THE UNIVERSAL MULTI-IMAGE SCANNER ---
   useEffect(() => {
-    if (!editor) return;
+    // 🚨 CRITICAL FIX: Do not run the scanner while the AI is streaming text.
+    // Wait until the text is completely finished rendering!
+    if (!editor || isLoading) return; 
 
     let isProcessing = false;
 
     const processImages = async () => {
-      // Prevent overlapping instances
       if (isProcessing) return;
       isProcessing = true;
 
       let targetPos: number | null = null;
       let promptToGenerate: string | null = null;
 
-      // 1. Scan the document for ANY pending image
       editor.state.doc.descendants((node, pos) => {
         if (node.type.name === 'image') {
           const title = node.attrs.title || '';
-          const src = node.attrs.src || '';
           
-          // Fallback catch: Even if AI forgets the title, if it's our raw SVG string, it's pending!
-          const isPending = title === 'pending-generation' || (src.includes('svg+xml') && title !== 'generating');
-
-          if (isPending) {
+          if (title === 'pending-generation') {
             targetPos = pos;
             promptToGenerate = node.attrs.alt || "A beautiful highly detailed illustration"; 
             return false; 
@@ -176,7 +169,6 @@ export default function Editor() {
         }
       });
 
-      // BASE CASE: Queue is empty
       if (targetPos === null || !promptToGenerate) {
         setIsGeneratingImg(false);
         isProcessing = false;
@@ -184,9 +176,8 @@ export default function Editor() {
       }
 
       console.log(`🎯 [UNIVERSAL SCANNER] Processing image prompt: "${promptToGenerate}"`);
-      setIsGeneratingImg(true); // Lock the UI
+      setIsGeneratingImg(true); 
 
-      // 2. Mark as 'generating' so we don't process it twice
       editor.commands.command(({ tr, dispatch }) => {
         if (dispatch) {
           const node = editor.state.doc.nodeAt(targetPos!);
@@ -195,7 +186,6 @@ export default function Editor() {
         return true;
       });
 
-      // 3. Process the API Stream
       try {
         const res = await fetch('/api/generate-image', {
           method: 'POST',
@@ -238,9 +228,7 @@ export default function Editor() {
                     return found;
                   });
                 }
-              } catch (e) {
-                // Ignore fragmented JSON chunks
-              }
+              } catch (e) { }
             }
             boundary = buffer.indexOf('\n\n');
           }
@@ -248,7 +236,6 @@ export default function Editor() {
       } catch (err) {
         console.error("🚨 [FETCH ERROR]:", err);
         
-        // Error Recovery SVG
         editor.commands.command(({ tr, dispatch }) => {
           let found = false;
           editor.state.doc.descendants((node, pos) => {
@@ -264,7 +251,6 @@ export default function Editor() {
           return found;
         });
       } finally {
-        // Clean up the title tag
         editor.commands.command(({ tr, dispatch }) => {
           editor.state.doc.descendants((node, pos) => {
             if (node.type.name === 'image' && node.attrs.title === 'generating') {
@@ -276,22 +262,16 @@ export default function Editor() {
         });
 
         isProcessing = false;
-        
-        // RECURSION: Call it again in case multiple images were added
+        // Recursively check if there are any MORE pending images
         processImages();
       }
     };
 
-    // Listen to TipTap's native update event. Works for chat, card edits, AND bubble menu!
-    editor.on('update', processImages);
-    
-    // Check once on mount/dependency change just in case
+    // 🚨 We removed editor.on('update'). 
+    // It now only runs once when isLoading changes to false!
     processImages();
 
-    return () => {
-      editor.off('update', processImages);
-    };
-  }, [editor]);
+  }, [editor, isLoading]); // <-- Dependency array now watches isLoading!
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -332,7 +312,8 @@ export default function Editor() {
       { text: promptInput }, 
       { body: { 
           documentContext: getStructuredContext(), 
-          referenceContext: attachment?.content || '' 
+          referenceContext: attachment?.content || '',
+          systemInstruction: config.aiBehavior.systemPrompt,
         } 
       }
     ); 
@@ -358,12 +339,16 @@ export default function Editor() {
       const response = await fetch('/api/edit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: actionPrompt, selectedText })
+        body: JSON.stringify({ 
+          prompt: actionPrompt, 
+          selectedText,
+          // 🚨 SEND THE CONTEXT-AWARE PROMPT!
+          systemInstruction: config.aiBehavior.inlineEditPrompt 
+        })
       });
 
       if (!response.body) throw new Error('No response body');
       
-      // Delete old selection before we fetch
       editor.commands.deleteSelection();
 
       const reader = response.body.getReader();
@@ -376,17 +361,14 @@ export default function Editor() {
         fullText += decoder.decode(value, { stream: true });
       }
 
-      // 🚨 AGGRESSIVE SANITIZER: Strip out any hallucinated markdown code blocks!
       const cleanedText = fullText
-        .replace(/^```html\s*/i, '') // Removes opening ```html
-        .replace(/^```\s*/i, '')     // Removes opening ```
-        .replace(/\s*```$/i, '')     // Removes closing ```
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // 🚨 Force asterisks to <strong> tags
+        .replace(/^```html\s*/i, '') 
+        .replace(/^```\s*/i, '')     
+        .replace(/\s*```$/i, '')     
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') 
         .trim();
 
-      // Insert perfectly constructed, sanitized HTML
       editor.commands.insertContent(cleanedText);
-
     } catch (error) {
       console.error("Inline edit failed:", error);
     } finally {
@@ -400,29 +382,130 @@ export default function Editor() {
 
   return (
     <div className="flex h-screen w-screen bg-gray-100 overflow-hidden">
-
-<ExportDialog
-  isOpen={isExportDialogOpen}
-  onClose={() => setIsExportDialogOpen(false)}
-  documentTitle="Your Document Title"
-  editor={editor}
-/>
+      <ExportDialog
+        isOpen={isExportDialogOpen}
+        onClose={() => setIsExportDialogOpen(false)}
+        documentTitle={`Untitled ${config.name}`}
+        editor={editor}
+        config={config} 
+      />
       
-      {/* 🚨 DYNAMIC CSS INJECTION: Hides the Card.tsx "Ask AI" buttons while AI is generating */}
-      <style>{isGlobalLock ? `.group:hover .group-hover\\:opacity-100 { opacity: 0 !important; pointer-events: none !important; }` : ''}</style>
+      {/* 🚨 THE SAFE LAYOUT CSS FIX */}
+      <style>{`
+        ${isGlobalLock ? `.group:hover .group-hover\\:opacity-100 { opacity: 0 !important; pointer-events: none !important; }` : ''}
 
+        /* 1. Base Card Shape (Applies to both) */
+        .ProseMirror [data-node-view-wrapper][data-type="card"] {
+          width: 100%;
+          max-width: ${config.canvasConstraints.uiMaxWidth};
+          min-height: ${config.canvasConstraints.uiMinHeight};
+          height: auto; 
+          padding: ${config.canvasConstraints.padding};
+          margin-left: auto;
+          margin-right: auto;
+          overflow: hidden; 
+          background: white;
+          transition: max-width 0.3s ease, min-height 0.3s ease; 
+          position: relative;
+        }
+
+        ${config.id === 'social' ? `
+          /* 🚨 2. SOCIAL MEDIA STRICT SPLIT LAYOUT */
+          
+          /* Force Social card to act as a strict vertical flex container */
+          .ProseMirror [data-node-view-wrapper][data-type="card"] {
+            display: flex;
+            flex-direction: column;
+          }
+          .ProseMirror [data-node-view-wrapper][data-type="card"] > div {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+          }
+          
+          .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="columns"] {
+            flex: 1;
+            display: flex;
+            gap: 0 !important; 
+            margin: 0 !important;
+            align-items: stretch; 
+          }
+
+          /* Left Column (Text) */
+          .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="column"]:first-child {
+            flex: 2 !important; 
+            padding: 3.5rem !important;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+          }
+
+          /* Right Column (Image container) */
+          .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="column"]:last-child {
+            flex: 1 !important; 
+            padding: 0 !important;
+            margin: 0 !important;
+            position: relative !important; 
+          }
+
+          /* Absolute Image positioning for full bleed */
+          .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="column"]:last-child img {
+            position: absolute !important; 
+            top: 0 !important;
+            left: 0 !important;
+            bottom: 0 !important;
+            right: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: cover !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border-radius: 0 !important;
+            display: block !important;
+          }
+        ` : `
+          /* 🚨 3. STANDARD DOCUMENT LAYOUT (RESTORED) */
+          
+          /* Let the document flow naturally */
+          .ProseMirror [data-node-view-wrapper][data-type="card"] > div {
+            display: block; 
+          }
+          
+          .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="columns"] {
+            display: flex;
+            gap: 3rem; 
+            align-items: center; /* Centers title vertically alongside image */
+          }
+          
+          .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="column"] {
+            flex: 1;
+            min-width: 0;
+          }
+          
+          /* Gives the image that beautiful rounded "Gamma" presentation look */
+          .ProseMirror [data-node-view-wrapper][data-type="card"] img {
+            width: 100%;
+            height: auto;
+            border-radius: 0.75rem; 
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); 
+            object-fit: cover;
+            margin: 0 auto;
+          }
+        `}
+      `}</style>
+
+      {/* ... The rest of the UI structure remains completely identical ... */}
       <div className="flex-1 flex flex-col bg-white border-r border-gray-200 shadow-sm z-10 relative">
         <div className="h-14 border-b border-gray-200 bg-white flex items-center px-6 justify-between shrink-0">
-          
-          {/* Left Side: Title & Badge */}
           <div className="flex items-center gap-3">
-            <h1 className="text-lg font-semibold text-gray-800">AI Content Editor</h1>
+            <h1 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+              <span className="text-xl">{config.icon}</span> 
+              {config.name} Editor
+            </h1>
             <span className="text-xs font-medium px-2.5 py-1 bg-purple-100 text-purple-800 rounded-full border border-purple-200">
               Context-Aware Mode
             </span>
           </div>
-
-          {/* 🚨 NEW: The Share Button */}
           <button 
             onClick={() => setIsExportDialogOpen(true)}
             className="flex items-center gap-2 px-4 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-full hover:bg-blue-700 transition-colors shadow-sm"
@@ -434,7 +517,6 @@ export default function Editor() {
         <MenuBar editor={editor} />
         
         <div className="flex-1 overflow-y-auto relative bg-gray-50 pt-8 pb-32 px-4">
-          
           {editor && (
             <BubbleMenu 
               editor={editor} 
@@ -447,16 +529,13 @@ export default function Editor() {
               >
                 ✨ Improve
               </button>
-              
               <button 
                 onClick={() => handleInlineEdit('Make this significantly shorter and more concise.')}
                 className="px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 ✂️ Shorten
               </button>
-
               <div className="w-px h-5 bg-gray-300 mx-2" />
-              
               <form 
                 onSubmit={(e) => { e.preventDefault(); handleInlineEdit(editPrompt); }} 
                 className="flex items-center"
@@ -535,7 +614,6 @@ export default function Editor() {
         </div>
 
         <div className="p-4 bg-white border-t border-gray-200 shrink-0">
-          
           {attachment && (
             <div className="flex items-center gap-2 mb-3 px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-medium rounded-lg inline-flex w-fit border border-blue-100 shadow-sm">
               📄 {attachment.name}
@@ -550,7 +628,6 @@ export default function Editor() {
           )}
 
           <form onSubmit={handleSubmit} className="relative flex items-center gap-2">
-            
             <input 
               type="file" 
               ref={fileInputRef} 
@@ -579,7 +656,7 @@ export default function Editor() {
                 value={promptInput}
                 onChange={(e) => setPromptInput(e.target.value)}
                 disabled={isGlobalLock}
-                placeholder={isGlobalLock ? "Waiting for tasks to finish..." : "Ask the AI to write or edit..."}
+                placeholder={isGlobalLock ? "Waiting for tasks to finish..." : `Ask the AI to write a ${config.name.toLowerCase()}...`}
                 className={`w-full pl-4 pr-10 py-3 rounded-xl border border-gray-200 outline-none transition-all text-sm ${
                   isGlobalLock ? 'opacity-50 cursor-not-allowed bg-gray-100' : 'bg-gray-50 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
                 }`}

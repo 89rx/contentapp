@@ -2,11 +2,15 @@
 
 import { useState } from 'react';
 
+// 🚨 1. Import the type definition from our registry
+import { ContentTypeDefinition } from '@/lib/core/content-types';
+
 interface ExportDialogProps {
   isOpen: boolean;
   onClose: () => void;
   documentTitle?: string;
   editor: any; 
+  config: ContentTypeDefinition; // 🚨 2. Add config to the expected props
 }
 
 export const ExportDialog: React.FC<ExportDialogProps> = ({
@@ -14,6 +18,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
   onClose,
   documentTitle = 'Document',
   editor,
+  config, // 🚨 3. Destructure it here
 }) => {
   const [isExporting, setIsExporting] = useState(false);
 
@@ -26,7 +31,12 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
       const response = await fetch('/api/export-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ html }),
+        body: JSON.stringify({ 
+          html,
+          // 🚨 4. SCALABILITY: Send the dynamic dimensions to the backend!
+          width: config.canvasConstraints.width,
+          height: config.canvasConstraints.minHeight
+        }),
       });
       
       if (!response.ok) throw new Error('Export failed');
@@ -56,7 +66,8 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
       <div className="bg-white rounded-xl shadow-2xl w-[400px] p-6 animate-in fade-in zoom-in-95 duration-200">
         
         <div className="mb-6">
-          <h2 className="text-xl font-bold text-gray-800">Export Document</h2>
+          {/* 🚨 5. Make the title dynamic based on what they are making */}
+          <h2 className="text-xl font-bold text-gray-800">Export {config.name}</h2>
           <p className="text-sm text-gray-500 mt-1">
             Download a high-quality PDF of <strong>{documentTitle}</strong>.
           </p>

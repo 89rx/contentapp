@@ -3,10 +3,26 @@ import { ReactNodeViewRenderer, NodeViewWrapper, NodeViewContent } from '@tiptap
 import { useState } from 'react';
 import { ContentRegistry } from '@/lib/core/content-types';
 
+const SYSTEM_COLORS = [
+  '#000000', '#4b5563', '#6b7280', '#9ca3af', '#f3f4f6', '#ffffff',
+  '#fef08a', '#fdba74', '#fca5a5', '#d8b4fe', '#93c5fd', '#86efac',
+  '#facc15', '#f97316', '#ef4444', '#a855f7', '#3b82f6', '#22c55e',
+  '#a16207', '#9a3412', '#991b1b', '#6b21a8', '#1d4ed8', '#166534'
+];
+
 const CardComponent = (props: any) => {
   const [showPrompt, setShowPrompt] = useState(false);
+  const [showColorPicker, setShowColorPicker] = useState(false);
   const [promptInput, setPromptInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
+
+  // Fallback to white if no color is set
+  const currentColor = props.node.attrs.backgroundColor || '#ffffff';
+
+  const handleColorChange = (color: string | null) => {
+    props.updateAttributes({ backgroundColor: color });
+    setShowColorPicker(false);
+  };
 
   const handleAIEdit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,7 +40,6 @@ const CardComponent = (props: any) => {
       .run();
 
       try {
-        // 🚨 1. dynamically grab the correct instructions based on the URL
         const typeMatch = window.location.pathname.match(/\/editor\/([^/]+)/);
         const type = typeMatch ? typeMatch[1] : 'document';
         const config = ContentRegistry[type];
@@ -33,7 +48,6 @@ const CardComponent = (props: any) => {
         const response = await fetch('/api/edit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          // 🚨 2. We are now actually sending the instructions!
           body: JSON.stringify({ prompt: promptInput, selectedText, systemInstruction })
         });
   
@@ -61,19 +75,17 @@ const CardComponent = (props: any) => {
           const currentFrom = pos + 1;
           const currentTo = pos + currentNode.nodeSize - 1;
 
-          // 🚨 3. The Try/Catch shield: Ignores TipTap errors when HTML tags are half-streamed
           try {
             props.editor.chain()
               .deleteRange({ from: currentFrom, to: currentTo })
               .insertContentAt(currentFrom, cleanedText)
               .run();
           } catch (error) {
-            // Silently skip this tick. It will succeed on the next tick once the AI closes the HTML tag!
+            // Silently skip this tick
           }
         }
       }
       
-      // 🚨 4. Wake up the image scanner!
       window.dispatchEvent(new CustomEvent('editor:trigger-image-scan'));
 
     } catch (error) {
@@ -87,21 +99,68 @@ const CardComponent = (props: any) => {
 
   return (
     <NodeViewWrapper 
-      data-type="card" // 🚨 CRITICAL: This lets Editor.tsx target it dynamically!
-      className="group relative bg-white rounded-2xl shadow-sm border border-gray-200 mb-8 mx-auto transition-all hover:border-blue-300 hover:shadow-md overflow-hidden flex flex-col"
+      data-type="card" 
+      // 🚨 DYNAMIC INLINE STYLE: This overrides Tailwind and survives PDF exports!
+      style={{ backgroundColor: currentColor }}
+      className="group relative rounded-2xl shadow-sm border border-gray-200 mb-8 mx-auto transition-all hover:border-blue-300 hover:shadow-md overflow-hidden flex flex-col"
     >
       
-      {/* 🚨 Removed 'min-h-[2rem]' so it respects our dynamic aspect-ratio */}
       <NodeViewContent className="focus:outline-none flex-1 flex flex-col" />
 
-      {/* --- FLOATING HOVER CONTROLS (Keep these exactly the same) --- */}
+      {/* --- FLOATING HOVER CONTROLS --- */}
       <div 
         contentEditable={false}
-        className="absolute bottom-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex! flex-row! items-center gap-1 bg-white border border-gray-200 shadow-sm rounded-lg p-1 z-50 w-max"
+        className="absolute bottom-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity !flex !flex-row items-center justify-center gap-1 bg-white border border-gray-200 shadow-sm rounded-lg p-1 z-50 w-max !h-auto"
       >
-        {/* The New Ask AI Button */}
+        
+        {/* 🚨 THE NEW COLOR PICKER DROPDOWN */}
+        <div className="relative flex items-center">
+          <button
+            onClick={() => { setShowColorPicker(!showColorPicker); setShowPrompt(false); }}
+            className="px-2 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-100 rounded-md transition-colors flex items-center gap-2"
+            title="Change Card Color"
+          >
+            <div 
+              className="w-4 h-4 rounded shadow-sm border border-gray-300" 
+              style={{ backgroundColor: currentColor }}
+            />
+            {currentColor === '#ffffff' ? 'Default' : 'Color'}
+            <svg className="w-3 h-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"></path></svg>
+          </button>
+
+          {showColorPicker && (
+            <div className="absolute bottom-full mb-2 left-0 bg-white border border-gray-200 shadow-xl rounded-xl p-3 w-[220px] flex flex-col gap-3 z-50 cursor-default">
+              <div>
+                <div className="text-xs font-semibold text-gray-500 mb-2">System colors</div>
+                <div className="grid grid-cols-6 gap-1.5">
+                  {SYSTEM_COLORS.map(c => (
+                    <button
+                      key={c}
+                      onClick={() => handleColorChange(c)}
+                      className={`w-6 h-6 rounded-md border ${currentColor === c ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200 hover:border-gray-400'} transition-all`}
+                      style={{ backgroundColor: c }}
+                      title={c}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div className="h-px w-full bg-gray-100" />
+              <button
+                onClick={() => handleColorChange(null)}
+                className="text-xs font-medium text-gray-600 hover:text-gray-900 flex items-center justify-center gap-1.5 py-1.5 hover:bg-gray-50 rounded-md transition-colors"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                Reset to default
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="w-px h-4 bg-gray-300 mx-1" />
+
+        {/* The Ask AI Button */}
         <button
-          onClick={() => setShowPrompt(!showPrompt)}
+          onClick={() => { setShowPrompt(!showPrompt); setShowColorPicker(false); }}
           className="px-2 py-1.5 text-xs font-bold text-purple-600 hover:bg-purple-50 rounded-md transition-colors flex items-center gap-1"
           title="Edit this card with AI"
         >
@@ -127,7 +186,7 @@ const CardComponent = (props: any) => {
 
         {/* --- INLINE AI PROMPT INPUT --- */}
         {showPrompt && (
-          <form onSubmit={handleAIEdit} className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-white border border-purple-200 shadow-xl rounded-xl p-2 flex items-center gap-2 w-72">
+          <form onSubmit={handleAIEdit} className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-white border border-purple-200 shadow-xl rounded-xl p-2 flex items-center gap-2 w-72 z-50">
             <input
               type="text"
               placeholder="What should the AI change?"
@@ -135,7 +194,6 @@ const CardComponent = (props: any) => {
               onChange={(e) => setPromptInput(e.target.value)}
               disabled={isStreaming}
               autoFocus
-              // VERY IMPORTANT: Stops TipTap from hijacking the Enter key and Spacebar!
               onKeyDown={(e) => e.stopPropagation()} 
               className="flex-1 text-sm border-none focus:ring-0 outline-none bg-transparent placeholder-gray-400 px-1"
             />
@@ -159,6 +217,26 @@ export const DocumentCard = Node.create({
   group: 'block',
   content: 'block+',
   
+  // 🚨 CRITICAL: We added backgroundColor to the TipTap schema!
+  addAttributes() {
+    return {
+      backgroundColor: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-bg-color'),
+        renderHTML: attributes => {
+          if (!attributes.backgroundColor) {
+            return {};
+          }
+          return {
+            'data-bg-color': attributes.backgroundColor,
+            // Automatically translates the attribute into a true CSS inline style when exported
+            style: `background-color: ${attributes.backgroundColor}`,
+          };
+        },
+      },
+    };
+  },
+
   parseHTML() {
     return [{ tag: 'div[data-type="card"]' }];
   },

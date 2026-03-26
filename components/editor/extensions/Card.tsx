@@ -23,21 +23,21 @@ const CardComponent = (props: any) => {
       .insertContentAt(initialFrom, '<p class="text-purple-600 animate-pulse font-medium">✨ AI is rewriting this card...</p>')
       .run();
 
-    try {
-      // 🚨 1. dynamically grab the correct instructions based on the URL
-      const typeMatch = window.location.pathname.match(/\/editor\/([^/]+)/);
-      const type = typeMatch ? typeMatch[1] : 'document';
-      const config = ContentRegistry[type];
-      const systemInstruction = config?.aiBehavior.inlineEditPrompt || '';
-
-      const response = await fetch('/api/edit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // 🚨 2. We are now actually sending the instructions!
-        body: JSON.stringify({ prompt: promptInput, selectedText, systemInstruction })
-      });
-
-      if (!response.body) throw new Error('No response body');
+      try {
+        // 🚨 1. dynamically grab the correct instructions based on the URL
+        const typeMatch = window.location.pathname.match(/\/editor\/([^/]+)/);
+        const type = typeMatch ? typeMatch[1] : 'document';
+        const config = ContentRegistry[type];
+        const systemInstruction = config?.aiBehavior.inlineEditPrompt || '';
+  
+        const response = await fetch('/api/edit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          // 🚨 2. We are now actually sending the instructions!
+          body: JSON.stringify({ prompt: promptInput, selectedText, systemInstruction })
+        });
+  
+        if (!response.body) throw new Error('No response body');
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();

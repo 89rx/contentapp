@@ -264,26 +264,20 @@ export default function Editor({ config }: { config: ContentTypeDefinition }) {
       }
     };
 
+    // 1. Runs initially AND perfectly triggers when the main standard generation finishes (isLoading turns false)
     processImages();
 
-    // 🚨 1. Listen for standard document updates
-    const handleUpdate = () => {
-      if (!isProcessing && !isLoading) {
-        processImages();
-      }
-    };
-    editor.on('update', handleUpdate);
-
-    // 🚨 2. Listen for manual triggers from our Edit routes
+    // 🚨 2. FIX: We now ONLY listen for the manual triggers from our Edit routes.
+    // This completely removes the double-fetch crash caused by listening to TipTap's native update stream!
     const handleCustomTrigger = () => {
       if (!isProcessing && !isLoading) {
         processImages();
       }
     };
+    
     window.addEventListener('editor:trigger-image-scan', handleCustomTrigger);
 
     return () => {
-      editor.off('update', handleUpdate);
       window.removeEventListener('editor:trigger-image-scan', handleCustomTrigger);
     };
 
@@ -446,11 +440,20 @@ export default function Editor({ config }: { config: ContentTypeDefinition }) {
           .ProseMirror [data-node-view-wrapper][data-type="card"] {
             display: flex;
             flex-direction: column;
+            padding: 0 !important; 
           }
-          .ProseMirror [data-node-view-wrapper][data-type="card"] > div {
+          
+          /* 🚨 FIX: Only target the content wrapper, ignore our absolute UI menus! */
+          .ProseMirror [data-node-view-wrapper][data-type="card"] > div:not([contenteditable="false"]) {
             flex: 1;
             display: flex;
             flex-direction: column;
+            height: 100%;
+          }
+
+          /* 🚨 THE FIX: Kill ALL stray paragraphs injected by TipTap outside the columns */
+          .ProseMirror [data-node-view-wrapper][data-type="card"] > div > p {
+            display: none !important;
           }
           
           .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="columns"] {
@@ -459,6 +462,7 @@ export default function Editor({ config }: { config: ContentTypeDefinition }) {
             gap: 0 !important; 
             margin: 0 !important;
             align-items: stretch; 
+            height: 100%;
           }
 
           /* Left Column (Text) */
@@ -470,16 +474,28 @@ export default function Editor({ config }: { config: ContentTypeDefinition }) {
             justify-content: center;
           }
 
+          /* 🚨 BOMB-PROOF SELECTOR: Any column that isn't the first one becomes the image container */
           /* Right Column (Image container) */
-          .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="column"]:last-child {
+          .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="column"]:not(:first-child) {
             flex: 1 !important; 
             padding: 0 !important;
             margin: 0 !important;
             position: relative !important; 
+            min-height: 100% !important; 
           }
 
+          /* 🚨 NEUTRALIZE TIPTAP'S INVISIBLE WRAPPERS: Forces any <p> tag around the image to vanish */
+          .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="column"]:not(:first-child) p {
+            display: contents !important;
+          }
+
+          /* 🚨 THE BR KILLER: Obliterate the invisible <br> TipTap injects during the edit stream! */
+          .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="column"]:not(:first-child) br {
+            display: none !important;
+          }
+            
           /* Absolute Image positioning for full bleed */
-          .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="column"]:last-child img {
+          .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="column"]:not(:first-child) img {
             position: absolute !important; 
             top: 0 !important;
             left: 0 !important;
@@ -493,7 +509,19 @@ export default function Editor({ config }: { config: ContentTypeDefinition }) {
             border-radius: 0 !important;
             display: block !important;
           }
+
+          /* 🚨 Style the new AI-generated Quote */
+          .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="column"]:first-child blockquote {
+            margin-top: 1.5rem !important;
+            border-left: 4px solid #8b5cf6 !important; 
+            padding-left: 1.25rem !important;
+            font-style: italic !important;
+            color: #4b5563 !important;
+            font-size: 1.1rem !important;
+            line-height: 1.6 !important;
+          }
         ` : `
+        
           /* 🚨 3. STANDARD DOCUMENT LAYOUT (RESTORED) */
           
           /* Let the document flow naturally */

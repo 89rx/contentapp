@@ -142,35 +142,49 @@ export const ContentRegistry: Record<string, ContentTypeDefinition> = {
       You MUST use EXACTLY this HTML template inside the <DOC> tags. Do not add any inline CSS styles. Just fill in the brackets []:
       
       <DOC>
-      <div data-type="card">
-        <div data-type="columns">
-          <div data-type="column">
-            <h2>[Your Punchy Title Here]</h2>
-            <p>[Your short engaging description or quote (max 50 words) here]</p>
-          </div>
-          <div data-type="column">
-            <img src="https://placehold.co/800x800/f4f4f5/a855f7.png?text=Generating+Artwork...+%E2%9C%A8" alt="[Highly detailed description for the AI image generator]" title="pending-generation" class="w-full h-full object-cover rounded-xl shadow-sm" />
-          </div>
-        </div>
-      </div>
+<div data-type="card">
+<div data-type="columns">
+<div data-type="column">
+<h2>[Your Punchy Title Here]</h2>
+<p>[Your short engaging description or quote (max 50 words) here]</p>
+<blockquote>[Add an inspiring or highly relevant quote here]</blockquote>
+</div>
+<div data-type="column">
+<img src="https://placehold.co/800x800/f4f4f5/a855f7.png?text=Generating+Artwork...+%E2%9C%A8" alt="[Highly detailed description for the AI image generator]" title="pending-generation" class="w-full h-full object-cover rounded-xl shadow-sm" />
+</div>
+</div>
+</div>
       </DOC>
       
       ${GLOBAL_AI_RULES}`,
 
-      inlineEditPrompt: `You are a viral social media copy editor. 
-      CRITICAL RULES:
-      1. Revise the text EXACTLY according to the instruction.
-      2. Keep it EXTREMELY short and punchy. It must fit in a 1:1 social square.
-      3. OUTPUT ONLY THE REVISED TEXT. No conversational filler.
-      4. PURE HTML ONLY (NO MARKDOWN). Output valid HTML tags.
-      ${INLINE_IMAGE_RULE}`,
+      inlineEditPrompt: `You are a viral social media copy editor modifying a single social post card. 
+      
+      CRITICAL RULES FOR OUTPUTTING TEXT:
+      1. PURE HTML FORMATTING: NEVER use Markdown formatting. Use pure HTML tags. NO whitespace indentation for <div> tags.
+      2. FIT THE FORMAT: Keep it EXTREMELY short and punchy. It must fit in a 1:1 social square.
+      3. ONLY THE CONTENT: Do NOT output the <DOC> tags or <div data-type="card"> wrapper.
+      4. NO CONVERSATION: Output ONLY the finalized HTML.
+      
+      STRUCTURAL FORMATTING:
+      You MUST maintain the 2-column structure for social cards. Use exactly this format with NO indentation:
+<div data-type="columns">
+<div data-type="column">
+<h2>[Punchy Title]</h2>
+<p>[Short Description]</p>
+<blockquote>[Add an inspiring or highly relevant quote here]</blockquote>
+</div>
+<div data-type="column">
+<img src="https://placehold.co/800x800/f4f4f5/a855f7.png?text=Generating+Artwork...+%E2%9C%A8" alt="[Descriptive image prompt]" title="pending-generation" class="w-full h-full object-cover rounded-xl shadow-sm" />
+</div>
+</div>`,
     },
     canvasConstraints: { 
       width: '1080px', 
       minHeight: '1080px',
       padding: '0px', 
       uiMaxWidth: '550px', 
-      uiMinHeight: '550px' // Social post stays rigidly square
+      uiMinHeight: '550px' 
     },
     allowedExports: ['png'], 
   }

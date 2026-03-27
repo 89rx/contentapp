@@ -11,6 +11,7 @@
   "dependencies": {
     "@ai-sdk/openai": "^3.0.48",
     "@ai-sdk/react": "^3.0.140",
+    "@sparticuz/chromium": "^143.0.4",
     "@supabase/supabase-js": "^2.100.1",
     "@tiptap/extension-highlight": "^3.20.4",
     "@tiptap/extension-image": "^3.20.4",
@@ -34,6 +35,7 @@
     "pdfjs-dist": "^5.5.207",
     "playwright": "^1.58.2",
     "puppeteer": "^24.40.0",
+    "puppeteer-core": "^24.40.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "tiptap-markdown": "^0.9.0",

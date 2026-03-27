@@ -76,6 +76,9 @@ export default function Editor({
   // 🚨 THE DOUBLE-FETCH SHIELD: React Strict Mode persists this across mounts
   const isProcessingImg = useRef(false); 
 
+  // 🚨 NEW: Create a live state for the document title
+  const [docTitle, setDocTitle] = useState(initialTitle || `Untitled ${config.name}`);
+
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'idle'>('idle');
 
   const editor = useEditor({
@@ -410,6 +413,9 @@ export default function Editor({
         .replace(/["']/g, '')    // Remove quotes
         .replace(/html/gi, '')   // Remove stray 'html' words
         .trim();
+
+      
+      setDocTitle(cleanTitle);
   
       await fetch('/api/documents', {
         method: 'PATCH',
@@ -855,7 +861,7 @@ export default function Editor({
   <h1 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
     <span className="text-xl">{config.icon}</span> 
     {/* 🚨 Use the DB title or fallback to the config name */}
-    {initialTitle || `Untitled ${config.name}`}
+    {docTitle || `Untitled ${config.name}`}
   </h1>
   
   {/* 🚨 Auto-save Indicator (Already in your code, but ensure it's placed here) */}

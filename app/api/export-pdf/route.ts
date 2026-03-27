@@ -1,6 +1,9 @@
 // app/api/export-pdf/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-core';
+import chromium from '@sparticuz/chromium';
+
+export const maxDuration = 60; // 🚨 Allow Vercel more time to process
 
 export async function POST(req: NextRequest) {
   try {
@@ -179,9 +182,11 @@ export async function POST(req: NextRequest) {
       </html>
     `;
 
+    // 🚨 VERCEL SERVERLESS LAUNCH FIX
     const browser = await puppeteer.launch({
+      args: chromium.args,
+      executablePath: await chromium.executablePath(),
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
     
     const page = await browser.newPage();

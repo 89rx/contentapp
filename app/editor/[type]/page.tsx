@@ -17,7 +17,6 @@ export default async function DynamicEditorRoute({
 
   if (!config) notFound();
 
-  // 1. IF NO ID: Create a blank document in the DB and redirect to its new URL
   if (!resolvedSearch.id) {
     const { data, error } = await supabase
       .from('documents')
@@ -27,22 +26,30 @@ export default async function DynamicEditorRoute({
 
     if (!error && data) {
       redirect(`/editor/${resolvedParams.type}?id=${data.id}`);
-    } else {
-      console.error("Supabase Insert Error:", error);
     }
   }
 
-  // 2. IF ID EXISTS: Fetch the saved HTML from the database
   let initialContent = null;
+  let initialTitle = null; // 🚨 New variable
+
   if (resolvedSearch.id) {
     const { data } = await supabase
       .from('documents')
-      .select('content_html')
+      .select('content_html, title') // 🚨 Fetch title
       .eq('id', resolvedSearch.id)
       .single();
       
     initialContent = data?.content_html;
+    initialTitle = data?.title; // 🚨 Store title
   }
 
-  return <Editor config={config} initialContent={initialContent} documentId={resolvedSearch.id} />;
+  // 🚨 Pass initialTitle to the Editor
+  return (
+    <Editor 
+      config={config} 
+      initialContent={initialContent} 
+      initialTitle={initialTitle} 
+      documentId={resolvedSearch.id} 
+    />
+  );
 }

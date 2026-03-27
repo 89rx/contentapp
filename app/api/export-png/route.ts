@@ -1,6 +1,9 @@
 // app/api/export-image/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-core';
+import chromium from '@sparticuz/chromium';
+
+export const maxDuration = 60; // 🚨 Allow Vercel more time to process
 
 export async function POST(req: NextRequest) {
   try {
@@ -124,7 +127,13 @@ export async function POST(req: NextRequest) {
       </html>
     `;
 
-    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+    // 🚨 VERCEL SERVERLESS LAUNCH FIX
+    const browser = await puppeteer.launch({
+      args: chromium.args,
+      executablePath: await chromium.executablePath(),
+      headless: true,
+    });
+    
     const page = await browser.newPage();
     
     await page.setViewport({ width: pageW + 100, height: pageH + 100, deviceScaleFactor: 2 });
@@ -134,7 +143,6 @@ export async function POST(req: NextRequest) {
     const element = await page.$('[data-type="card"]');
     if (!element) throw new Error('Could not find the [data-type="card"] element to screenshot.');
 
-    // 🚨 DEBUG LOGGING: Print exact dimensions to terminal before taking the shot
     const box = await element.boundingBox();
     console.log(`\n📸 [Backend Export Debug] Element Bounding Box:`, box);
     if (box) {

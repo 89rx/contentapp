@@ -1,8 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-
-// 🚨 1. Import the type definition from our registry
 import { ContentTypeDefinition } from '@/lib/core/content-types';
 
 interface ExportDialogProps {
@@ -10,42 +8,40 @@ interface ExportDialogProps {
   onClose: () => void;
   documentTitle?: string;
   editor: any; 
-  config: ContentTypeDefinition; // 🚨 2. Add config to the expected props
+  config: ContentTypeDefinition;
 }
 
 export const ExportDialog: React.FC<ExportDialogProps> = ({
-  isOpen,
-  onClose,
-  documentTitle = 'Document',
-  editor,
-  config, // 🚨 3. Destructure it here
+  isOpen, onClose, documentTitle = 'Document', editor, config,
 }) => {
-  const [isExporting, setIsExporting] = useState(false);
+  const [exportingType, setExportingType] = useState<'pdf' | 'png' | null>(null);
 
-  const handleExport = async () => {
+  const handleExport = async (format: 'pdf' | 'png') => {
     if (!editor) return;
-    setIsExporting(true);
+    setExportingType(format);
     
     try {
       const html = editor.getHTML();
-      const response = await fetch('/api/export-pdf', {
+      const endpoint = format === 'pdf' ? '/api/export-pdf' : '/api/export-png';
+      
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           html,
-          // 🚨 4. SCALABILITY: Send the dynamic dimensions to the backend!
           width: config.canvasConstraints.width,
-          height: config.canvasConstraints.minHeight
+          height: config.canvasConstraints.minHeight,
+          typeId: config.id
         }),
       });
       
-      if (!response.ok) throw new Error('Export failed');
+      if (!response.ok) throw new Error(`${format.toUpperCase()} Export failed`);
 
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${documentTitle.replace(/\s+/g, '_')}.pdf`;
+      a.download = `${documentTitle.replace(/\s+/g, '_')}.${format}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -54,47 +50,60 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
       console.error(err);
       alert('Export failed. Please try again.');
     } finally {
-      setIsExporting(false);
+      setExportingType(null);
       onClose();
     }
   };
 
   if (!isOpen) return null;
 
+  // 🚨 1. COUNT THE CARDS: Count how many cards exist in the current document
+  const html = editor?.getHTML() || '';
+  const cardCount = (html.match(/data-type="card"/g) || []).length;
+
+  // 🚨 2. UNIVERSAL DYNAMIC VISIBILITY
+  let canExportPng = config.allowedExports.includes('png');
+  let canExportPdf = config.allowedExports.includes('pdf');
+
+  if (cardCount > 1) {
+    canExportPng = false; // Hide PNG for multiple pages (too long to screenshot)
+    canExportPdf = true;  // Force PDF for multi-page layouts!
+  } else if (config.id === 'social') {
+    canExportPdf = false; // If it's a single social post, force them to use PNG
+  }
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 transition-opacity">
-      <div className="bg-white rounded-xl shadow-2xl w-[400px] p-6 animate-in fade-in zoom-in-95 duration-200">
+      <div className="bg-white rounded-xl shadow-2xl w-[450px] p-6 animate-in fade-in zoom-in-95 duration-200">
         
         <div className="mb-6">
-          {/* 🚨 5. Make the title dynamic based on what they are making */}
           <h2 className="text-xl font-bold text-gray-800">Export {config.name}</h2>
-          <p className="text-sm text-gray-500 mt-1">
-            Download a high-quality PDF of <strong>{documentTitle}</strong>.
-          </p>
+          <p className="text-sm text-gray-500 mt-1">Download a high-quality copy of <strong>{documentTitle}</strong>.</p>
+          
+          {/* 🚨 Universal feedback message for multi-card layouts */}
+          {cardCount > 1 && (
+            <p className="text-xs font-semibold text-purple-600 mt-3 bg-purple-50 p-2 rounded-lg border border-purple-100">
+              Multiple cards detected. Exporting as a multi-page PDF.
+            </p>
+          )}
         </div>
 
         <div className="flex justify-end gap-3 mt-8">
-          <button
-            onClick={onClose}
-            disabled={isExporting}
-            className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
-          >
+          <button onClick={onClose} disabled={exportingType !== null} className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50">
             Cancel
           </button>
-          <button
-            onClick={handleExport}
-            disabled={isExporting}
-            className="px-5 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-70 transition-colors shadow-sm flex items-center gap-2"
-          >
-            {isExporting ? (
-              <>
-                <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                Generating...
-              </>
-            ) : (
-              'Export PDF'
-            )}
-          </button>
+          
+          {canExportPng && (
+            <button onClick={() => handleExport('png')} disabled={exportingType !== null} className="px-5 py-2 text-sm font-medium bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-70 transition-colors shadow-sm flex items-center gap-2">
+              {exportingType === 'png' ? 'Processing...' : 'Export High-Res PNG'}
+            </button>
+          )}
+
+          {canExportPdf && (
+            <button onClick={() => handleExport('pdf')} disabled={exportingType !== null} className="px-5 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-70 transition-colors shadow-sm flex items-center gap-2">
+              {exportingType === 'pdf' ? 'Processing...' : 'Export PDF'}
+            </button>
+          )}
         </div>
       </div>
     </div>

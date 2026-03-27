@@ -146,11 +146,14 @@ export default function Editor({ config }: { config: ContentTypeDefinition }) {
   useEffect(() => {
     if (!editor || isLoading) return; 
 
-    let isProcessing = false;
+    // 🚨 FIX: We use a local mutable object to track the lock. 
+    // This perfectly bypasses stale closures in the event listener below 
+    // without violating React's Hook rules!
+    const processingState = { isWorking: false };
 
     const processImages = async () => {
-      if (isProcessing) return;
-      isProcessing = true;
+      if (processingState.isWorking) return;
+      processingState.isWorking = true;
 
       let targetPos: number | null = null;
       let promptToGenerate: string | null = null;
@@ -169,7 +172,7 @@ export default function Editor({ config }: { config: ContentTypeDefinition }) {
 
       if (targetPos === null || !promptToGenerate) {
         setIsGeneratingImg(false);
-        isProcessing = false;
+        processingState.isWorking = false;
         return;
       }
 
@@ -259,7 +262,10 @@ export default function Editor({ config }: { config: ContentTypeDefinition }) {
           return true;
         });
 
-        isProcessing = false;
+        // 🚨 Unlock the processor
+        processingState.isWorking = false;
+        
+        // Recursively trigger to catch any additional queued images
         processImages();
       }
     };
@@ -267,10 +273,10 @@ export default function Editor({ config }: { config: ContentTypeDefinition }) {
     // 1. Runs initially AND perfectly triggers when the main standard generation finishes (isLoading turns false)
     processImages();
 
-    // 🚨 2. FIX: We now ONLY listen for the manual triggers from our Edit routes.
-    // This completely removes the double-fetch crash caused by listening to TipTap's native update stream!
+    // 🚨 2. We now ONLY listen for the manual triggers from our Edit routes.
     const handleCustomTrigger = () => {
-      if (!isProcessing && !isLoading) {
+      // 🚨 Safely checks our mutable state object
+      if (!processingState.isWorking && !isLoading) {
         processImages();
       }
     };
@@ -520,6 +526,214 @@ export default function Editor({ config }: { config: ContentTypeDefinition }) {
             font-size: 1.1rem !important;
             line-height: 1.6 !important;
           }
+        ` : config.id === 'landing' ? `
+          /* 🚨 3. LANDING PAGE HERO LAYOUT */
+          
+          /* The outer card */
+          .ProseMirror [data-node-view-wrapper][data-type="card"] {
+            padding: 0 !important;
+            border-radius: 1.5rem !important; 
+            overflow: hidden !important;
+            min-height: 700px !important;
+            height: auto !important; /* 🚨 Allows infinite expansion */
+            background-color: #0f172a !important; 
+            position: relative !important; 
+          }
+          
+          /* The TipTap content wrapper */
+          .ProseMirror [data-node-view-wrapper][data-type="card"] > div:not([contenteditable="false"]) {
+            display: flex !important;
+            flex-direction: column !important;
+            width: 100% !important;
+            min-height: 700px !important;
+            height: auto !important; 
+            position: static !important; 
+            flex: 1 0 auto !important; /* 🚨 FIX 1: Overrides Tailwind's .flex-1 from Card.tsx */
+          }
+
+          /* 🍰 LAYER 1: THE BACKGROUND IMAGE WRAPPER */
+          .ProseMirror [data-node-view-wrapper][data-type="card"] > div:not([contenteditable="false"]) > p:has(img),
+          .ProseMirror [data-node-view-wrapper][data-type="card"] > div:not([contenteditable="false"]) > *:first-child:has(img) {
+             position: absolute !important;
+             top: 0 !important;
+             left: 0 !important;
+             right: 0 !important;
+             bottom: 0 !important;
+             margin: 0 !important;
+             padding: 0 !important;
+             z-index: 1 !important;
+             pointer-events: none !important; 
+          }
+          
+          .ProseMirror [data-node-view-wrapper][data-type="card"] img {
+             position: absolute !important;
+             top: 0 !important;
+             left: 0 !important;
+             width: 100% !important;
+             height: 100% !important;
+             object-fit: cover !important;
+             border-radius: 1.5rem !important;
+             filter: brightness(0.35) saturate(1.2) !important; 
+             margin: 0 !important;
+             padding: 0 !important;
+          }
+
+          /* 🍰 LAYER 2: THE NAVBAR */
+          .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="columns"]:nth-of-type(1) {
+             position: relative !important;
+             z-index: 10 !important;
+             display: flex !important;
+             flex-direction: row !important;
+             justify-content: space-between !important;
+             align-items: center !important;
+             padding: 2.5rem 4rem 0 4rem !important;
+             width: 100% !important;
+             margin: 0 !important;
+          }
+          
+          .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="columns"]:nth-of-type(1) div[data-type="column"] {
+             flex: unset !important;
+             padding: 0 !important;
+          }
+
+          .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="columns"]:nth-of-type(1) h3 {
+             font-size: 1.75rem !important;
+             font-weight: 800 !important;
+             color: white !important;
+             margin: 0 !important;
+             letter-spacing: -0.025em !important;
+          }
+
+          .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="columns"]:nth-of-type(1) p {
+             font-size: 1rem !important;
+             font-weight: 600 !important;
+             color: rgba(255, 255, 255, 0.8) !important;
+             margin: 0 !important;
+          }
+
+          /* 🍰 LAYER 3: THE HERO CONTENT */
+          .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="columns"]:nth-of-type(2) {
+             position: relative !important;
+             z-index: 10 !important;
+             flex: 1 0 auto !important; 
+             
+             display: flex !important;
+             flex-direction: column !important;
+             justify-content: flex-start !important; /* 🚨 FIX: Kills the flexbox centering clipping bug */
+             align-items: center !important;
+             
+             width: 100% !important;
+             margin: 0 !important;
+             padding: 4rem 2rem 8rem 2rem !important;
+             height: auto !important; 
+          }
+
+          .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="columns"]:nth-of-type(2) div[data-type="column"] {
+             display: flex !important;
+             flex-direction: column !important;
+             justify-content: flex-start !important; /* 🚨 FIX: Kills the flexbox centering clipping bug */
+             align-items: center !important;
+             text-align: center !important;
+             
+             width: 100% !important;
+             padding: 0 !important;
+             height: auto !important; 
+             flex: 1 0 auto !important; 
+             margin: auto 0 !important; /* 🚨 FIX: Safely centers content vertically without restricting height! */
+          }
+
+          /* 🌟 PROTECT MANUALLY TYPED PARAGRAPHS (THE EXPAND FIX) */
+          /* 🚨 FIX 1: Reduced padding and added min-height so hitting 'Enter' adds visible space! */
+          .ProseMirror [data-node-view-wrapper][data-type="card"] > div:not([contenteditable="false"]) > p:not(:has(img)) {
+             position: relative !important;
+             z-index: 10 !important;
+             color: white !important;
+             text-align: center !important;
+             padding: 0.5rem 4rem !important; 
+             font-size: 1.25rem !important;
+             min-height: 2rem !important; /* Forces empty lines to stretch the canvas */
+          }
+
+          .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="columns"]:nth-of-type(2) code {
+            display: inline-block !important;
+            padding: 0.4rem 1.25rem !important;
+            border-radius: 9999px !important;
+            background: rgba(255, 255, 255, 0.1) !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            color: white !important;
+            font-family: inherit !important; 
+            font-size: 0.85rem !important;
+            font-weight: 600 !important;
+            letter-spacing: 0.05em !important;
+            text-transform: uppercase !important;
+            margin-bottom: 1.5rem !important;
+            backdrop-filter: blur(8px) !important;
+          }
+
+          .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="columns"]:nth-of-type(2) h1 {
+            font-size: 4.5rem !important;
+            font-weight: 800 !important;
+            line-height: 1.1 !important;
+            color: white !important;
+            margin: 0 0 1.5rem 0 !important;
+            max-width: 900px !important;
+            text-wrap: balance !important;
+            letter-spacing: -0.03em !important;
+          }
+
+          .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="columns"]:nth-of-type(2) p:not(:has(strong)):not(:has(code)):not(:has(s)) {
+            font-size: 1.35rem !important;
+            color: rgba(255, 255, 255, 0.85) !important;
+            max-width: 650px !important;
+            margin: 0 0 3.5rem 0 !important;
+            line-height: 1.6 !important;
+          }
+
+          .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="columns"]:nth-of-type(2) p:has(strong) {
+            display: flex !important;
+            flex-direction: row !important;
+            gap: 1.25rem !important;
+            justify-content: center !important;
+            align-items: center !important;
+            margin-bottom: 2rem !important;
+            width: 100% !important;
+          }
+
+          .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="columns"]:nth-of-type(2) strong {
+            display: inline-block !important;
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+            padding: 1.1rem 2.5rem !important;
+            border-radius: 9999px !important;
+            font-size: 1.125rem !important;
+            font-weight: 700 !important;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1) !important;
+            cursor: pointer !important;
+            transition: transform 0.2s !important;
+          }
+
+          .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="columns"]:nth-of-type(2) em {
+            display: inline-block !important;
+            font-style: normal !important; 
+            background-color: transparent !important;
+            color: #ffffff !important;
+            border: 2px solid rgba(255, 255, 255, 0.5) !important;
+            padding: 1.1rem 2.5rem !important;
+            border-radius: 9999px !important;
+            font-size: 1.125rem !important;
+            font-weight: 700 !important;
+            cursor: pointer !important;
+          }
+          
+          .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="columns"]:nth-of-type(2) s {
+            display: block !important;
+            text-decoration: none !important; 
+            font-size: 0.95rem !important;
+            color: rgba(255, 255, 255, 0.5) !important;
+            font-weight: 500 !important;
+          }
+          
+          /* 🚨 FIX 2: DELETED the "display: none !important" rule for <br> tags entirely! */
         ` : `
         
           /* 🚨 3. STANDARD DOCUMENT LAYOUT (RESTORED) */

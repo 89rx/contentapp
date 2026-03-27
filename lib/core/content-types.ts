@@ -7,6 +7,7 @@ export interface ContentTypeDefinition {
   aiBehavior: {
     systemPrompt: string;
     inlineEditPrompt: string; // 🚨 NEW: Context-aware inline editing!
+    cardEditPrompt: string;   // 🚨 NEW: For the Card-level Ask AI button
     temperature: number;
     maxTokens: number;
     autoSuggestImages: boolean;
@@ -111,7 +112,41 @@ export const ContentRegistry: Record<string, ContentTypeDefinition> = {
       - IF AN IMAGE IS REQUESTED:
       Place the image AT THE VERY END of the card content, strictly below all paragraphs. Use exactly this tag:
 <img src="https://placehold.co/800x800/f4f4f5/a855f7.png?text=Generating+Artwork...+%E2%9C%A8" alt="[Write a highly descriptive image prompt here]" title="pending-generation" class="w-full h-full object-cover rounded-xl shadow-sm" />`,
+
+      cardEditPrompt: `You are an expert AI copy editor. Your job is to rewrite or modify the specific content of a single document card based on the user's instructions.
+
+      CRITICAL RULES FOR OUTPUTTING TEXT:
+      1. PURE HTML FORMATTING: NEVER use Markdown formatting. NO whitespace indentation for tags (TipTap breaks if you indent HTML).
+      2. ONLY THE CONTENT: Do NOT output the <DOC> tags or <div data-type="card"> wrapper. ONLY output the inner HTML content.
+      3. NO CONVERSATION: Output ONLY the finalized HTML. No conversational filler, no \`\`\`html code blocks.
+
+      DEFAULT FORMATTING (Use this for standard text edits):
+      - Use normal HTML tags flowing from top to bottom: <h1>, <h2>, <h3>, <p>, <ul>, <ol>, <li>.
+      - Example Output:
+      <h1>Main Heading</h1>
+      <p>This is a standard paragraph flowing normally.</p>
+
+      CONDITIONAL FORMATTING (Apply ONLY IF specifically requested by the user):
+
+      - IF COLUMNS ARE REQUESTED:
+      Use this exact un-indented structure:
+<div data-type="columns">
+<div data-type="column">
+<p>Left side content</p>
+</div>
+<div data-type="column">
+<p>Right side content</p>
+</div>
+</div>
+      
+      - IF A TABLE IS REQUESTED:
+      Use standard un-indented HTML: <table>, <thead>, <tbody>, <tr>, <th>, and <td>.
+
+      - IF AN IMAGE IS REQUESTED:
+      Place the image AT THE VERY END of the card content, strictly below all paragraphs. Use exactly this tag:
+<img src="https://placehold.co/800x800/f4f4f5/a855f7.png?text=Generating+Artwork...+%E2%9C%A8" alt="[Write a highly descriptive image prompt here]" title="pending-generation" class="w-full h-full object-cover rounded-xl shadow-sm" />`,
     },
+    
     canvasConstraints: { 
       width: '1280px', 
       minHeight: 'auto', 
@@ -158,16 +193,19 @@ export const ContentRegistry: Record<string, ContentTypeDefinition> = {
       
       ${GLOBAL_AI_RULES}`,
 
-      inlineEditPrompt: `You are a viral social media copy editor modifying a single social post card. 
+      inlineEditPrompt: `You are a strict copy editor modifying a single snippet of highlighted text. 
       
       CRITICAL RULES FOR OUTPUTTING TEXT:
-      1. PURE HTML FORMATTING: NEVER use Markdown formatting. Use pure HTML tags. NO whitespace indentation for <div> tags.
-      2. FIT THE FORMAT: Keep it EXTREMELY short and punchy. It must fit in a 1:1 social square.
-      3. ONLY THE CONTENT: Do NOT output the <DOC> tags or <div data-type="card"> wrapper.
-      4. NO CONVERSATION: Output ONLY the finalized HTML.
+      1. 1-TO-1 REPLACEMENT (CRITICAL): You MUST ONLY rewrite the specific text provided. If the selected text is just a sentence or a paragraph, you must return EXACTLY ONE paragraph. 
+      2. NO OVERACHIEVING: DO NOT generate new headings, blockquotes, or additional paragraphs. DO NOT rewrite the entire post layout.
+      3. PURE HTML: Output your rewritten text wrapped in the appropriate basic HTML tag (e.g., <p>).
+      4. NO STRUCTURE: NEVER output <div> tags, columns, or images.
+      5. NO CONVERSATION: Output ONLY the finalized HTML.`,
+
+      cardEditPrompt: `You are a viral social media copy editor rewriting an entire social post card.
       
-      STRUCTURAL FORMATTING:
-      You MUST maintain the 2-column structure for social cards. Use exactly this format with NO indentation:
+      CRITICAL RULES:
+      1. FULL STRUCTURE REQUIRED: You MUST maintain the 2-column structure. Use exactly this format with NO indentation:
 <div data-type="columns">
 <div data-type="column">
 <h2>[Punchy Title]</h2>
@@ -177,7 +215,8 @@ export const ContentRegistry: Record<string, ContentTypeDefinition> = {
 <div data-type="column">
 <img src="https://placehold.co/800x800/f4f4f5/a855f7.png?text=Generating+Artwork...+%E2%9C%A8" alt="[Descriptive image prompt]" title="pending-generation" class="w-full h-full object-cover rounded-xl shadow-sm" />
 </div>
-</div>`,
+</div>
+      2. NO CONVERSATION: Output ONLY the finalized HTML.`,
     },
     canvasConstraints: { 
       width: '1080px', 
@@ -186,6 +225,128 @@ export const ContentRegistry: Record<string, ContentTypeDefinition> = {
       uiMaxWidth: '550px', 
       uiMinHeight: '550px' 
     },
-    allowedExports: ['png'], 
+    allowedExports: ['png', 'pdf'], 
+  },
+  // --- 3. THE LANDING PAGE HERO ---
+  landing: {
+    id: 'landing',
+    name: 'Landing Page Hero',
+    description: 'Ultra-wide cinematic homepage hero with full-bleed backgrounds and CTAs.',
+    icon: '💻',
+    isDisabled: false,
+    aiBehavior: {
+      temperature: 0.7,
+      maxTokens: 800,
+      autoSuggestImages: true,
+      systemPrompt: `You are an expert SaaS conversion copywriter and web designer. 
+      
+      CRITICAL INSTRUCTIONS (ANTI-HALLUCINATION & STRUCTURAL RULES):
+      1. YOU MUST GENERATE EXACTLY ONE (1) CARD representing a website's Hero Section.
+      2. NEVER USE MARKDOWN. Do NOT use backticks (\`). You MUST use the literal HTML <code> tag. For example: <code>✨ NEW ADVENTURE</code>. 
+      3. DO NOT DELETE THE IMAGE TAG. You MUST output the exact <img> tag provided in the template below.
+      
+      You MUST use EXACTLY this HTML template inside the <DOC> tags. Copy it verbatim and ONLY fill in the bracketed [ ] content:
+      
+      <DOC>
+<div data-type="card">
+<img src="https://placehold.co/1440x900/0f172a/ffffff.png?text=Generating+Background...+%E2%9C%A8" alt="[Write a highly detailed description for a cinematic background image here. This image MUST be visually relevant to the headline and subheadline you write]" title="pending-generation" />
+
+<div data-type="columns">
+<div data-type="column">
+<h3>[Brand Name]</h3>
+</div>
+<div data-type="column">
+<p>Product &nbsp;&nbsp;&nbsp; Solutions &nbsp;&nbsp;&nbsp; Pricing &nbsp;&nbsp;&nbsp; Login</p>
+</div>
+</div>
+
+<div data-type="columns">
+<div data-type="column">
+<p><code>[✨ Eyebrow Badge e.g. New Feature]</code></p>
+<h1>[Compelling Value Proposition Headline]</h1>
+<p>[Engaging subheadline explaining the value in 1-2 sentences]</p>
+<p><strong>[Primary CTA Button]</strong> <em>[Secondary Action Button]</em></p>
+<p><s>[Social proof e.g. ⭐⭐⭐⭐⭐ Trusted by 10,000+ teams worldwide]</s></p>
+</div>
+</div>
+</div>
+      </DOC>
+      
+      ${GLOBAL_AI_RULES}`,
+
+      inlineEditPrompt: `You are a conversion rate optimization (CRO) expert modifying a Landing Page Hero section.
+      
+      CRITICAL RULES FOR OUTPUTTING TEXT:
+      1. PURE HTML FORMATTING: NEVER use Markdown. Use pure HTML tags. NO backticks (\`). Use <code> tag for badges.
+      2. ONLY THE CONTENT: Do NOT output the <DOC> tags or <div data-type="card"> wrapper. ONLY output the inner HTML.
+      3. YOU MUST INCLUDE THE IMAGE TAG. Always start your output with the <img ... /> tag at the very top.
+      
+      4. IMAGE GENERATION CONDITIONAL LOGIC:
+         - **If the user explicitly asks to change the image**: Update the 'alt' attribute of the <img> tag with a detailed prompt for the specific new image requested.
+         - **If the user makes ANY other text edit (even if they don't mention the image)**: You MUST update the 'alt' attribute of the <img> tag with a NEW, high-priority prompt for a relevant, cinematic background that is visually related to the updated text content. DO NOT preserve the old image description.
+         - **In ALL cases**: You MUST set the 'title' attribute of the <img> tag to "pending-generation" so the image generator is triggered.
+      
+      STRUCTURAL FORMATTING:
+      You MUST strictly maintain the Landing Page structure exactly as below. Do not change the order of elements:
+<img src="https://placehold.co/1440x900/0f172a/ffffff.png?text=Generating+Background...+%E2%9C%A8" alt="[Update prompt to be relevant to text content or follow explicit instructions]" title="pending-generation" />
+<div data-type="columns">
+<div data-type="column">
+<h3>[Brand Name]</h3>
+</div>
+<div data-type="column">
+<p>Product &nbsp;&nbsp;&nbsp; Solutions &nbsp;&nbsp;&nbsp; Pricing &nbsp;&nbsp;&nbsp; Login</p>
+</div>
+</div>
+<div data-type="columns">
+<div data-type="column">
+<p><code>[Eyebrow Badge]</code></p>
+<h1>[Headline]</h1>
+<p>[Subheadline]</p>
+<p><strong>[Primary CTA]</strong> <em>[Secondary CTA]</em></p>
+<p><s>[Social Proof]</s></p>
+</div>
+</div>`,
+
+cardEditPrompt: `You are a conversion rate optimization (CRO) expert modifying a Landing Page Hero section.
+      
+CRITICAL RULES FOR OUTPUTTING TEXT:
+1. PURE HTML FORMATTING: NEVER use Markdown. Use pure HTML tags. NO backticks (\`). Use <code> tag for badges.
+2. ONLY THE CONTENT: Do NOT output the <DOC> tags or <div data-type="card"> wrapper. ONLY output the inner HTML.
+3. YOU MUST INCLUDE THE IMAGE TAG. Always start your output with the <img ... /> tag at the very top.
+
+4. IMAGE GENERATION CONDITIONAL LOGIC:
+   - **If the user explicitly asks to change the image**: Update the 'alt' attribute of the <img> tag with a detailed prompt for the specific new image requested.
+   - **If the user makes ANY other text edit (even if they don't mention the image)**: You MUST update the 'alt' attribute of the <img> tag with a NEW, high-priority prompt for a relevant, cinematic background that is visually related to the updated text content. DO NOT preserve the old image description.
+   - **In ALL cases**: You MUST set the 'title' attribute of the <img> tag to "pending-generation" so the image generator is triggered.
+
+STRUCTURAL FORMATTING:
+You MUST strictly maintain the Landing Page structure exactly as below. Do not change the order of elements:
+<img src="https://placehold.co/1440x900/0f172a/ffffff.png?text=Generating+Background...+%E2%9C%A8" alt="[Update prompt to be relevant to text content or follow explicit instructions]" title="pending-generation" />
+<div data-type="columns">
+<div data-type="column">
+<h3>[Brand Name]</h3>
+</div>
+<div data-type="column">
+<p>Product &nbsp;&nbsp;&nbsp; Solutions &nbsp;&nbsp;&nbsp; Pricing &nbsp;&nbsp;&nbsp; Login</p>
+</div>
+</div>
+<div data-type="columns">
+<div data-type="column">
+<p><code>[Eyebrow Badge]</code></p>
+<h1>[Headline]</h1>
+<p>[Subheadline]</p>
+<p><strong>[Primary CTA]</strong> <em>[Secondary CTA]</em></p>
+<p><s>[Social Proof]</s></p>
+</div>
+</div>`,
+    },
+    canvasConstraints: { 
+      width: '1440px', 
+      minHeight: '750px', 
+      padding: '0px', 
+      uiMaxWidth: '1100px', 
+      uiMinHeight: '700px' 
+    },
+    allowedExports: ['png', 'pdf'], 
   }
 };

@@ -43,7 +43,7 @@ const CardComponent = (props: any) => {
         const typeMatch = window.location.pathname.match(/\/editor\/([^/]+)/);
         const type = typeMatch ? typeMatch[1] : 'document';
         const config = ContentRegistry[type];
-        const systemInstruction = config?.aiBehavior.inlineEditPrompt || '';
+        const systemInstruction = config?.aiBehavior.cardEditPrompt || '';
   
         const response = await fetch('/api/edit', {
           method: 'POST',
@@ -216,7 +216,8 @@ export const DocumentCard = Node.create({
   name: 'documentCard',
   group: 'block',
   content: 'block+',
-  
+
+
   // 🚨 CRITICAL: We added backgroundColor to the TipTap schema!
   addAttributes() {
     return {

@@ -152,7 +152,7 @@ export async function POST(req: NextRequest) {
     const imageBuffer = await element.screenshot({ type: 'png', omitBackground: true });
     await browser.close();
 
-    return new NextResponse(imageBuffer, {
+    return new NextResponse(imageBuffer as any, {
       status: 200,
       headers: { 'Content-Type': 'image/png', 'Content-Disposition': 'attachment; filename="export.png"' },
     });

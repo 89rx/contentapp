@@ -1,8 +1,12 @@
 import type { Editor } from '@tiptap/core';
 import { useEditorState } from '@tiptap/react';
 import { menuBarStateSelector } from './menuBarState';
+import { useRef, useState } from 'react';
 
 export const MenuBar = ({ editor }: { editor: Editor | null }) => {
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const editorState = useEditorState({
     editor: editor as Editor, 
     selector: menuBarStateSelector,
@@ -16,10 +20,46 @@ export const MenuBar = ({ editor }: { editor: Editor | null }) => {
       isActive ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
     }`;
 
-  const addImage = () => {
-    const url = window.prompt('Enter the image URL:');
-    if (url && editor) {
-      (editor.commands as any).setImage({ src: url });
+  // 🚨 NEW: The Native File Upload Handler
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Safety check: keep it under 5MB
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Please upload an image smaller than 5MB.');
+      return;
+    }
+
+    try {
+      setIsUploading(true);
+      
+      const formData = new FormData();
+      formData.append('file', file);
+
+      // Push to your backend upload route
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error('Upload failed');
+
+      const { url } = await res.json();
+
+      // Inject the permanent Supabase URL into the editor
+      if (url && editor) {
+        (editor.commands as any).setImage({ src: url });
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Failed to upload image. Please try again.');
+    } finally {
+      setIsUploading(false);
+      // Reset the input value so the user can upload the exact same file again if they delete it
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -52,8 +92,20 @@ export const MenuBar = ({ editor }: { editor: Editor | null }) => {
       
       <div className="w-px h-5 bg-gray-300 mx-1" />
       
-      <button onClick={addImage} className={btn(false)}>
-        🖼️ Image
+      {/* 🚨 THE NEW IMAGE UPLOAD UI */}
+      <input 
+        type="file" 
+        accept="image/png, image/jpeg, image/gif, image/webp" 
+        ref={fileInputRef} 
+        onChange={handleImageUpload} 
+        className="hidden" 
+      />
+      <button 
+        onClick={() => fileInputRef.current?.click()} 
+        disabled={isUploading}
+        className={btn(false, isUploading)}
+      >
+        {isUploading ? '⏳ Uploading...' : '🖼️ Image'}
       </button>
 
       <button 

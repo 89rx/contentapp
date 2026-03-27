@@ -49,7 +49,17 @@ const CustomDocument = Document.extend({
   content: 'documentCard+',
 });
 
-export default function Editor({ config }: { config: ContentTypeDefinition }) {
+export default function Editor({ 
+  config, 
+  initialContent, 
+  initialTitle, // 🚨 Added this
+  documentId 
+}: { 
+  config: ContentTypeDefinition;
+  initialContent?: string;
+  initialTitle?: string; // 🚨 Added this
+  documentId?: string;
+}) {
   const [isMounted, setIsMounted] = useState(false);
   const [promptInput, setPromptInput] = useState('');
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
@@ -57,12 +67,16 @@ export default function Editor({ config }: { config: ContentTypeDefinition }) {
   const [isEditingSelection, setIsEditingSelection] = useState(false);
   const [isGeneratingImg, setIsGeneratingImg] = useState(false);
   const [attachment, setAttachment] = useState<{name: string, content: string} | null>(null);
+
+  const saveTimeoutRef = useRef<any>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null); 
   const isWritingDoc = useRef(false);
   
   // 🚨 THE DOUBLE-FETCH SHIELD: React Strict Mode persists this across mounts
   const isProcessingImg = useRef(false); 
+
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'idle'>('idle');
 
   const editor = useEditor({
     extensions: [
@@ -80,15 +94,48 @@ export default function Editor({ config }: { config: ContentTypeDefinition }) {
       Column,      
       DocumentCard, 
     ], 
-    content: `<div data-type="card"><h1>Untitled ${config.name}</h1><p>Ask the AI to generate your ${config.name.toLowerCase()} or start typing...</p></div>`,
+
+    // 🚨 1. Load the DB content, or fallback to your default template
+    content: initialContent || `<div data-type="card"><h1>Untitled ${config.name}</h1><p>Ask the AI to generate your ${config.name.toLowerCase()} or start typing...</p></div>`,
+    
     editable: true,
     immediatelyRender: false,
     editorProps: {
-      attributes: { 
-        class: 'prose prose-lg focus:outline-none max-w-none min-h-[800px] pb-32',
-        spellcheck: 'false' 
-      },
+      attributes: { class: 'prose prose-lg focus:outline-none max-w-none min-h-[800px] pb-32', spellcheck: 'false' },
     },
+    
+    onUpdate: ({ editor }) => {
+      if (!documentId) return;
+      
+      // 1. Set status to 'saving' as soon as the user types
+      setSaveStatus('saving'); 
+      
+      const html = editor.getHTML();
+      
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      
+      saveTimeoutRef.current = setTimeout(async () => {
+        try {
+          // 2. Perform the save request
+          const response = await fetch('/api/documents', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: documentId, content_html: html })
+          });
+
+          if (!response.ok) throw new Error('Save failed');
+
+          // 3. Update status to 'saved' on success
+          setSaveStatus('saved'); 
+          
+          // 4. Optional: Reset to 'idle' after 2 seconds to fade out the indicator
+          setTimeout(() => setSaveStatus('idle'), 2000);
+        } catch (error) {
+          console.error("Auto-save error:", error);
+          setSaveStatus('idle'); // Reset on error so it doesn't stay stuck on 'saving'
+        }
+      }, 1000); // Wait 1 second after typing stops
+    }
   });
 
   const { messages, sendMessage, status } = useChat({
@@ -322,6 +369,12 @@ export default function Editor({ config }: { config: ContentTypeDefinition }) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!promptInput.trim() || isGlobalLock || !editor) return;
+    // 🚨 NEW: Dynamic Title Generation (Only if first time)
+    // We check if the document title in the DB needs updating
+    // For simplicity, we can just trigger a separate small fetch or bundle it
+    if (messages.length === 0) {
+      generateAndSaveTitle(promptInput);
+    }
     isWritingDoc.current = false; 
     
     sendMessage(
@@ -334,6 +387,36 @@ export default function Editor({ config }: { config: ContentTypeDefinition }) {
       }
     ); 
     setPromptInput('');
+  };
+
+  const generateAndSaveTitle = async (userPrompt: string) => {
+    try {
+      const res = await fetch('/api/edit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          prompt: `Create a 3-4 word catchy title for a ${config.name} based on this request: ${userPrompt}. Return ONLY the title, no quotes or markdown.`,
+          selectedText: "Untitled",
+          systemInstruction: "You are a creative titling assistant. Do not use markdown code blocks or the word 'html'."
+        })
+      });
+      
+      const title = await res.text();
+      
+      // 🚨 CLEANING LOGIC: Strip any markdown or extra characters
+      const cleanTitle = title
+        .replace(/```html/gi, '') // Remove opening code block
+        .replace(/```/gi, '')     // Remove closing code block
+        .replace(/["']/g, '')    // Remove quotes
+        .replace(/html/gi, '')   // Remove stray 'html' words
+        .trim();
+  
+      await fetch('/api/documents', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: documentId, title: cleanTitle })
+      });
+    } catch (e) { console.error("Title gen failed", e); }
   };
 
   const renderChatMessage = (text: string) => {
@@ -768,15 +851,31 @@ export default function Editor({ config }: { config: ContentTypeDefinition }) {
 
       <div className="flex-1 flex flex-col bg-white border-r border-gray-200 shadow-sm z-10 relative">
         <div className="h-14 border-b border-gray-200 bg-white flex items-center px-6 justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <h1 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-              <span className="text-xl">{config.icon}</span> 
-              {config.name} Editor
-            </h1>
-            <span className="text-xs font-medium px-2.5 py-1 bg-purple-100 text-purple-800 rounded-full border border-purple-200">
-              Context-Aware Mode
-            </span>
-          </div>
+        <div className="flex items-center gap-3">
+  <h1 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+    <span className="text-xl">{config.icon}</span> 
+    {/* 🚨 Use the DB title or fallback to the config name */}
+    {initialTitle || `Untitled ${config.name}`}
+  </h1>
+  
+  {/* 🚨 Auto-save Indicator (Already in your code, but ensure it's placed here) */}
+  <div className="flex items-center gap-2 min-w-[100px]">
+    {saveStatus === 'saving' && (
+      <span className="text-[10px] font-bold text-amber-600 animate-pulse uppercase tracking-wider">
+        ● Saving...
+      </span>
+    )}
+    {saveStatus === 'saved' && (
+      <span className="text-[10px] font-bold text-green-600 uppercase tracking-wider flex items-center gap-1">
+        ✓ Saved
+      </span>
+    )}
+  </div>
+  
+  <span className="text-xs font-medium px-2.5 py-1 bg-purple-100 text-purple-800 rounded-full border border-purple-200">
+    Context-Aware Mode
+  </span>
+</div>
           <button 
             onClick={() => setIsExportDialogOpen(true)}
             className="flex items-center gap-2 px-4 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-full hover:bg-blue-700 transition-colors shadow-sm"

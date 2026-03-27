@@ -1,24 +1,48 @@
+// app/editor/[type]/page.tsx
 import { ContentRegistry } from '@/lib/core/content-types';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import Editor from '@/components/editor/Editor';
+import { supabase } from '@/lib/supabase';
 
-// 🚨 1. Make the component async and type params as a Promise
 export default async function DynamicEditorRoute({ 
-  params 
+  params,
+  searchParams
 }: { 
-  params: Promise<{ type: string }> 
+  params: Promise<{ type: string }>;
+  searchParams: Promise<{ id?: string }>;
 }) {
-  // 🚨 2. Await the params before trying to read 'type'
   const resolvedParams = await params;
-  
-  // 3. Look up the configuration based on the URL parameter
+  const resolvedSearch = await searchParams;
   const config = ContentRegistry[resolvedParams.type];
 
-  // 4. If the user types a random URL, throw a 404
-  if (!config) {
-    notFound();
+  if (!config) notFound();
+
+  // 1. IF NO ID: Create a blank document in the DB and redirect to its new URL
+  if (!resolvedSearch.id) {
+    const { data, error } = await supabase
+      .from('documents')
+      .insert([{ type_id: resolvedParams.type }])
+      .select('id')
+      .single();
+
+    if (!error && data) {
+      redirect(`/editor/${resolvedParams.type}?id=${data.id}`);
+    } else {
+      console.error("Supabase Insert Error:", error);
+    }
   }
 
-  // 5. Pass the configuration down into our Editor canvas
-  return <Editor config={config} />;
+  // 2. IF ID EXISTS: Fetch the saved HTML from the database
+  let initialContent = null;
+  if (resolvedSearch.id) {
+    const { data } = await supabase
+      .from('documents')
+      .select('content_html')
+      .eq('id', resolvedSearch.id)
+      .single();
+      
+    initialContent = data?.content_html;
+  }
+
+  return <Editor config={config} initialContent={initialContent} documentId={resolvedSearch.id} />;
 }

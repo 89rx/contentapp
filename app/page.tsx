@@ -1,14 +1,21 @@
 import Link from 'next/link';
 import { ContentRegistry } from '@/lib/core/content-types';
+import { supabase } from '@/lib/supabase';
 
-export default function LandingPage() {
-  // Convert our centralized registry object into an array so we can map over it
+export const dynamic = 'force-dynamic';
+
+export default async function LandingPage() {
   const contentTypes = Object.values(ContentRegistry);
+
+  const { data: recentDocs } = await supabase
+  .from('documents')
+  .select('id, type_id, updated_at, title') // 🚨 Added 'title'
+  .order('updated_at', { ascending: false })
+  .limit(6);
 
   return (
     <div className="min-h-screen bg-[#FAFAFA] flex flex-col items-center justify-center p-6 font-sans selection:bg-blue-100">
       
-      {/* Hero Section */}
       <div className="max-w-3xl text-center mb-14 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out">
         <h1 className="text-[2.75rem] font-extrabold text-gray-900 tracking-tight mb-5 leading-tight">
           What are we creating today?
@@ -17,6 +24,44 @@ export default function LandingPage() {
           Select a content format. The AI will automatically adjust its reasoning, writing style, and the visual canvas to match your choice.
         </p>
       </div>
+
+      {/* 🚨 NEW: The Recent Documents Section */}
+      {recentDocs && recentDocs.length > 0 && (
+        <div className="max-w-4xl w-full mb-12 animate-in fade-in">
+          <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+            🕒 Jump back in
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {recentDocs.map(doc => {
+              const config = ContentRegistry[doc.type_id];
+              if (!config) return null;
+              
+              // Format the date nicely
+              const date = new Date(doc.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+              return (
+                <Link 
+                  key={doc.id} 
+                  href={`/editor/${doc.type_id}?id=${doc.id}`}
+                  className="p-4 bg-white rounded-xl border border-gray-200 hover:border-blue-500 hover:shadow-md transition-all flex items-start gap-3"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center text-lg shrink-0">
+                    {config.icon}
+                  </div>
+                  <div className="overflow-hidden">
+  {/* 🚨 Use the DB title, or fallback to the config name if title is null */}
+  <h3 className="font-semibold text-gray-900 truncate">
+    {doc.title || `Untitled ${config.name}`}
+  </h3>
+  <p className="text-xs text-gray-500 mt-1 truncate">Edited {date}</p>
+</div>
+                </Link>
+              );
+            })}
+          </div>
+          <div className="h-px w-full bg-gray-200 my-8" />
+        </div>
+      )}
 
       {/* Dynamic Grid of Content Types */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl w-full">

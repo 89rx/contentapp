@@ -535,6 +535,12 @@ export default function Editor({
           .ProseMirror [data-node-view-wrapper][data-type="card"] {
             display: flex;
             flex-direction: column;
+            /* 🚨 FIX 1: Give manually-added empty cards the exact 3.5rem padding the AI uses */
+            padding: 3.5rem !important; 
+          }
+
+          /* 🚨 FIX 2: Once columns are added, remove the card padding so the right-side image can go full-bleed! */
+          .ProseMirror [data-node-view-wrapper][data-type="card"]:has(div[data-type="columns"]) {
             padding: 0 !important; 
           }
           
@@ -546,8 +552,8 @@ export default function Editor({
             height: 100%;
           }
 
-          /* 🚨 THE FIX: Kill ALL stray paragraphs injected by TipTap outside the columns */
-          .ProseMirror [data-node-view-wrapper][data-type="card"] > div > p {
+          /* 🚨 FIX 3: Kill stray paragraphs ONLY when columns are active */
+          .ProseMirror [data-node-view-wrapper][data-type="card"]:has(div[data-type="columns"]) > div > p {
             display: none !important;
           }
           
@@ -618,15 +624,21 @@ export default function Editor({
         ` : config.id === 'landing' ? `
           /* 🚨 3. LANDING PAGE HERO LAYOUT */
           
-          /* The outer card */
+          /* 🚨 FIX 1: The outer card defaults to a clean white canvas with 3.5rem padding */
           .ProseMirror [data-node-view-wrapper][data-type="card"] {
-            padding: 0 !important;
+            padding: 3.5rem !important;
             border-radius: 1.5rem !important; 
             overflow: hidden !important;
             min-height: 700px !important;
-            height: auto !important; /* 🚨 Allows infinite expansion */
-            background-color: #0f172a !important; 
+            height: auto !important; 
+            background-color: white !important; 
             position: relative !important; 
+          }
+
+          /* 🚨 FIX 2: HERO MODE ACTIVATED! When AI adds columns, go dark and full-bleed! */
+          .ProseMirror [data-node-view-wrapper][data-type="card"]:has(div[data-type="columns"]) {
+            padding: 0 !important;
+            background-color: #0f172a !important;
           }
           
           /* The TipTap content wrapper */
@@ -634,15 +646,15 @@ export default function Editor({
             display: flex !important;
             flex-direction: column !important;
             width: 100% !important;
-            min-height: 700px !important;
+            min-height: 100% !important; 
             height: auto !important; 
             position: static !important; 
-            flex: 1 0 auto !important; /* 🚨 FIX 1: Overrides Tailwind's .flex-1 from Card.tsx */
+            flex: 1 0 auto !important; 
           }
 
-          /* 🍰 LAYER 1: THE BACKGROUND IMAGE WRAPPER */
-          .ProseMirror [data-node-view-wrapper][data-type="card"] > div:not([contenteditable="false"]) > p:has(img),
-          .ProseMirror [data-node-view-wrapper][data-type="card"] > div:not([contenteditable="false"]) > *:first-child:has(img) {
+          /* 🍰 LAYER 1: THE BACKGROUND IMAGE WRAPPER (Only when hero mode is active) */
+          .ProseMirror [data-node-view-wrapper][data-type="card"]:has(div[data-type="columns"]) > div:not([contenteditable="false"]) > p:has(img),
+          .ProseMirror [data-node-view-wrapper][data-type="card"]:has(div[data-type="columns"]) > div:not([contenteditable="false"]) > *:first-child:has(img) {
              position: absolute !important;
              top: 0 !important;
              left: 0 !important;
@@ -654,7 +666,7 @@ export default function Editor({
              pointer-events: none !important; 
           }
           
-          .ProseMirror [data-node-view-wrapper][data-type="card"] img {
+          .ProseMirror [data-node-view-wrapper][data-type="card"]:has(div[data-type="columns"]) img {
              position: absolute !important;
              top: 0 !important;
              left: 0 !important;
@@ -708,7 +720,7 @@ export default function Editor({
              
              display: flex !important;
              flex-direction: column !important;
-             justify-content: flex-start !important; /* 🚨 FIX: Kills the flexbox centering clipping bug */
+             justify-content: flex-start !important; 
              align-items: center !important;
              
              width: 100% !important;
@@ -720,7 +732,7 @@ export default function Editor({
           .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="columns"]:nth-of-type(2) div[data-type="column"] {
              display: flex !important;
              flex-direction: column !important;
-             justify-content: flex-start !important; /* 🚨 FIX: Kills the flexbox centering clipping bug */
+             justify-content: flex-start !important; 
              align-items: center !important;
              text-align: center !important;
              
@@ -728,19 +740,19 @@ export default function Editor({
              padding: 0 !important;
              height: auto !important; 
              flex: 1 0 auto !important; 
-             margin: auto 0 !important; /* 🚨 FIX: Safely centers content vertically without restricting height! */
+             margin: auto 0 !important; 
           }
 
-          /* 🌟 PROTECT MANUALLY TYPED PARAGRAPHS (THE EXPAND FIX) */
-          /* 🚨 FIX 1: Reduced padding and added min-height so hitting 'Enter' adds visible space! */
-          .ProseMirror [data-node-view-wrapper][data-type="card"] > div:not([contenteditable="false"]) > p:not(:has(img)) {
+          /* 🌟 PROTECT MANUALLY TYPED PARAGRAPHS */
+          /* 🚨 FIX 3: Apply white text ONLY when the Hero mode is active */
+          .ProseMirror [data-node-view-wrapper][data-type="card"]:has(div[data-type="columns"]) > div:not([contenteditable="false"]) > p:not(:has(img)) {
              position: relative !important;
              z-index: 10 !important;
              color: white !important;
              text-align: center !important;
              padding: 0.5rem 4rem !important; 
              font-size: 1.25rem !important;
-             min-height: 2rem !important; /* Forces empty lines to stretch the canvas */
+             min-height: 2rem !important; 
           }
 
           .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="columns"]:nth-of-type(2) code {
@@ -821,8 +833,7 @@ export default function Editor({
             color: rgba(255, 255, 255, 0.5) !important;
             font-weight: 500 !important;
           }
-          
-          /* 🚨 FIX 2: DELETED the "display: none !important" rule for <br> tags entirely! */
+        
         ` : `
         
           /* 🚨 3. STANDARD DOCUMENT LAYOUT (RESTORED) */
@@ -878,9 +889,7 @@ export default function Editor({
     )}
   </div>
   
-  <span className="text-xs font-medium px-2.5 py-1 bg-purple-100 text-purple-800 rounded-full border border-purple-200">
-    Context-Aware Mode
-  </span>
+  
 </div>
           <button 
             onClick={() => setIsExportDialogOpen(true)}

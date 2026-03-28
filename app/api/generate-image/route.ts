@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { supabase } from '@/lib/supabase';
 
+export const dynamic = 'force-dynamic';
+export const runtime = 'edge';
+
 const openai = new OpenAI();
 export const maxDuration = 60;
 
@@ -91,6 +94,8 @@ export async function POST(req: Request) {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache, no-transform',
         'Connection': 'keep-alive',
+        // 🚨 FIX 2: THE SILVER BULLET. This explicitly tells Vercel's Nginx proxy to STOP buffering your chunks!
+        'X-Accel-Buffering': 'no', 
       },
     });
 

@@ -98,9 +98,19 @@ export default function Editor({
       DocumentCard, 
     ], 
 
-    // 🚨 1. Load the DB content, or fallback to your default template
-    content: initialContent || `<div data-type="card"><h1>Untitled ${config.name}</h1><p>Ask the AI to generate your ${config.name.toLowerCase()} or start typing...</p></div>`,
-    
+ 
+    content: initialContent || (
+      config.id === 'landing'
+        ? `<div data-type="card">
+            <h1>Untitled ${config.name}</h1>
+            <p>Ask the AI Assistant to generate your landing page hero.</p>
+            <p><em>Note: Manual typing and the formatting menu are hidden for this format to preserve its strict, full-bleed visual layout.</em></p>
+           </div>`
+        : `<div data-type="card">
+            <h1>Untitled ${config.name}</h1>
+            <p>Ask the AI to generate your ${config.name.toLowerCase()} or start typing...</p>
+           </div>`
+    ),    
     editable: true,
     immediatelyRender: false,
     editorProps: {
@@ -156,10 +166,15 @@ export default function Editor({
   }, []);
 
   useEffect(() => {
-    if (editor && editor.isEditable === isGlobalLock) {
-      editor.setEditable(!isGlobalLock);
+    if (editor) {
+      // 🚨 FIX: Force read-only mode if the content type is 'landing'
+      const shouldBeEditable = config.id !== 'landing' && !isGlobalLock;
+      
+      if (editor.isEditable !== shouldBeEditable) {
+        editor.setEditable(shouldBeEditable);
+      }
     }
-  }, [isGlobalLock, editor]);
+  }, [isGlobalLock, editor, config.id]);
 
   // --- 1. THE MESSAGE LISTENER (PURE HTML STREAMING) ---
   useEffect(() => {
@@ -630,9 +645,8 @@ export default function Editor({
             line-height: 1.6 !important;
           }
         ` : config.id === 'landing' ? `
-          /* 🚨 3. LANDING PAGE HERO LAYOUT */
+          /* 🚨 3. LANDING PAGE HERO LAYOUT (FIXED FLOW & CANVAS EXPANSION) */
           
-          /* 🚨 FIX 1: The outer card defaults to a clean white canvas with 3.5rem padding */
           .ProseMirror [data-node-view-wrapper][data-type="card"] {
             padding: 3.5rem !important;
             border-radius: 1.5rem !important; 
@@ -643,24 +657,21 @@ export default function Editor({
             position: relative !important; 
           }
 
-          /* 🚨 FIX 2: HERO MODE ACTIVATED! When AI adds columns, go dark and full-bleed! */
           .ProseMirror [data-node-view-wrapper][data-type="card"]:has(div[data-type="columns"]) {
             padding: 0 !important;
             background-color: #0f172a !important;
           }
           
-          /* The TipTap content wrapper */
+          /* 🚨 FIX 1: Change from strict flex to native block flow. This stops TipTap from breaking on 'Enter'! */
           .ProseMirror [data-node-view-wrapper][data-type="card"] > div:not([contenteditable="false"]) {
-            display: flex !important;
-            flex-direction: column !important;
+            display: block !important;
             width: 100% !important;
             min-height: 100% !important; 
             height: auto !important; 
             position: static !important; 
-            flex: 1 0 auto !important; 
           }
 
-          /* 🍰 LAYER 1: THE BACKGROUND IMAGE WRAPPER (Only when hero mode is active) */
+          /* 🍰 LAYER 1: THE BACKGROUND IMAGE WRAPPER */
           .ProseMirror [data-node-view-wrapper][data-type="card"]:has(div[data-type="columns"]) > div:not([contenteditable="false"]) > p:has(img),
           .ProseMirror [data-node-view-wrapper][data-type="card"]:has(div[data-type="columns"]) > div:not([contenteditable="false"]) > *:first-child:has(img) {
              position: absolute !important;
@@ -672,6 +683,8 @@ export default function Editor({
              padding: 0 !important;
              z-index: 1 !important;
              pointer-events: none !important; 
+             user-select: none !important; /* 🚨 FIX 2: Prevent accidental selections */
+             caret-color: transparent !important; /* Hide the cursor so they don't backspace the image */
           }
           
           .ProseMirror [data-node-view-wrapper][data-type="card"]:has(div[data-type="columns"]) img {
@@ -681,10 +694,12 @@ export default function Editor({
              width: 100% !important;
              height: 100% !important;
              object-fit: cover !important;
+             object-position: top center !important; /* 🚨 FIX 3: Prevents the overlay "push up" bug when canvas expands */
              border-radius: 1.5rem !important;
              filter: brightness(0.35) saturate(1.2) !important; 
              margin: 0 !important;
              padding: 0 !important;
+             pointer-events: none !important;
           }
 
           /* 🍰 LAYER 2: THE NAVBAR */
@@ -721,38 +736,25 @@ export default function Editor({
           }
 
           /* 🍰 LAYER 3: THE HERO CONTENT */
+          /* 🚨 FIX 4: Changed from flex column to block, avoiding rigid flex constraints that fight TipTap */
           .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="columns"]:nth-of-type(2) {
              position: relative !important;
              z-index: 10 !important;
-             flex: 1 0 auto !important; 
-             
-             display: flex !important;
-             flex-direction: column !important;
-             justify-content: flex-start !important; 
-             align-items: center !important;
-             
+             display: block !important; 
              width: 100% !important;
              margin: 0 !important;
              padding: 4rem 2rem 8rem 2rem !important;
-             height: auto !important; 
+             text-align: center !important;
           }
 
           .ProseMirror [data-node-view-wrapper][data-type="card"] div[data-type="columns"]:nth-of-type(2) div[data-type="column"] {
-             display: flex !important;
-             flex-direction: column !important;
-             justify-content: flex-start !important; 
-             align-items: center !important;
-             text-align: center !important;
-             
+             display: block !important;
              width: 100% !important;
              padding: 0 !important;
-             height: auto !important; 
-             flex: 1 0 auto !important; 
-             margin: auto 0 !important; 
+             margin: 0 auto !important;
           }
 
           /* 🌟 PROTECT MANUALLY TYPED PARAGRAPHS */
-          /* 🚨 FIX 3: Apply white text ONLY when the Hero mode is active */
           .ProseMirror [data-node-view-wrapper][data-type="card"]:has(div[data-type="columns"]) > div:not([contenteditable="false"]) > p:not(:has(img)) {
              position: relative !important;
              z-index: 10 !important;
@@ -784,7 +786,7 @@ export default function Editor({
             font-weight: 800 !important;
             line-height: 1.1 !important;
             color: white !important;
-            margin: 0 0 1.5rem 0 !important;
+            margin: 0 auto 1.5rem auto !important; /* 🚨 FIX 5: Replaced flex centering with horizontal auto margins */
             max-width: 900px !important;
             text-wrap: balance !important;
             letter-spacing: -0.03em !important;
@@ -794,7 +796,7 @@ export default function Editor({
             font-size: 1.35rem !important;
             color: rgba(255, 255, 255, 0.85) !important;
             max-width: 650px !important;
-            margin: 0 0 3.5rem 0 !important;
+            margin: 0 auto 3.5rem auto !important; /* 🚨 FIX 5: Horizontal block centering */
             line-height: 1.6 !important;
           }
 
@@ -841,6 +843,8 @@ export default function Editor({
             color: rgba(255, 255, 255, 0.5) !important;
             font-weight: 500 !important;
           }
+        
+        
         
         ` : `
         
@@ -907,7 +911,7 @@ export default function Editor({
           </button>
         </div>
         
-        <MenuBar editor={editor} />
+        {config.id !== 'landing' && <MenuBar editor={editor} />}
         
         <div className="flex-1 overflow-y-auto relative bg-gray-50 pt-8 pb-32 px-4">
           {editor && (

@@ -229,10 +229,19 @@ export default function Editor({
       console.log(`🎯 [UNIVERSAL SCANNER] Processing image prompt: "${promptToGenerate}"`);
       setIsGeneratingImg(true); 
 
+      // 🚨 NEW: A simple, bulletproof static placeholder image
+      const loadingImg = 'https://placehold.co/800x400/f8fafc/64748b?text=Loading...';
+
       editor.commands.command(({ tr, dispatch }) => {
         if (dispatch) {
           const node = editor.state.doc.nodeAt(targetPos!);
-          if (node) tr.setNodeMarkup(targetPos!, null, { ...node.attrs, title: 'generating' });
+          if (node) {
+            tr.setNodeMarkup(targetPos!, null, { 
+              ...node.attrs, 
+              title: 'generating',
+              src: loadingImg // 🚨 Instantly swap the broken image for the static loading picture
+            });
+          }
         }
         return true;
       });

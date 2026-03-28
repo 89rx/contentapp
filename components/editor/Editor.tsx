@@ -229,8 +229,7 @@ export default function Editor({
       console.log(`🎯 [UNIVERSAL SCANNER] Processing image prompt: "${promptToGenerate}"`);
       setIsGeneratingImg(true); 
 
-      // 🚨 NEW: A simple, bulletproof static placeholder image
-      const loadingImg = 'https://placehold.co/800x400/f8fafc/64748b?text=Loading...';
+      const loadingImg = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='400' viewBox='0 0 800 400'%3E%3Crect width='100%25' height='100%25' fill='%23f8fafc'/%3E%3Ccircle cx='400' cy='200' r='18' stroke='%2394a3b8' stroke-width='4' fill='none' stroke-dasharray='85 28' stroke-linecap='round'/%3E%3C/svg%3E";
 
       editor.commands.command(({ tr, dispatch }) => {
         if (dispatch) {
@@ -239,7 +238,7 @@ export default function Editor({
             tr.setNodeMarkup(targetPos!, null, { 
               ...node.attrs, 
               title: 'generating',
-              src: loadingImg // 🚨 Instantly swap the broken image for the static loading picture
+              src: loadingImg 
             });
           }
         }

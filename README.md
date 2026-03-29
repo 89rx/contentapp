@@ -37,7 +37,7 @@ Ensure you are on a **Windows OS** machine and have **Node.js 18+** as well as *
 Open your command prompt and run:
 ```cmd
 git clone <your-repo-url>
-cd magi-editor
+cd contentapp
 npm install
 ```
 

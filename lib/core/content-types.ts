@@ -6,8 +6,8 @@ export interface ContentTypeDefinition {
   isDisabled: boolean;
   aiBehavior: {
     systemPrompt: string;
-    inlineEditPrompt: string; // 🚨 NEW: Context-aware inline editing!
-    cardEditPrompt: string;   // 🚨 NEW: For the Card-level Ask AI button
+    inlineEditPrompt: string; 
+    cardEditPrompt: string;   
     temperature: number;
     maxTokens: number;
     autoSuggestImages: boolean;
@@ -29,14 +29,9 @@ CRITICAL COMMUNICATION RULES:
 3. THE CANVAS: Everything meant for the document canvas MUST be wrapped exactly inside <DOC> and </DOC> tags. The editor will only render what is inside these tags.
 `;
 
-const INLINE_IMAGE_RULE = `
-IMAGE REPLACEMENT: If the user asks to add or change an image, output an HTML tag exactly like this:
-<img src="https://placehold.co/800x800/f4f4f5/a855f7.png?text=Generating+Artwork...+%E2%9C%A8" alt="[DESCRIPTIVE PROMPT]" title="pending-generation" class="w-full h-full object-cover rounded-xl shadow-sm" />
-`;
-
 export const ContentRegistry: Record<string, ContentTypeDefinition> = {
   
-  // --- 1. THE PRESENTATION DOCUMENT (RESTORED) ---
+  // THE PRESENTATION DOCUMENT
   document: {
     id: 'document',
     name: 'Presentation Document',
@@ -47,7 +42,6 @@ export const ContentRegistry: Record<string, ContentTypeDefinition> = {
       temperature: 0.4,
       maxTokens: 2000,
       autoSuggestImages: true,
-      // 🚨 RESTORED: Your exact original prompt from the working backend!
       systemPrompt: `You are an expert AI writing assistant. Your output drives a structured text editor canvas composed of premium visual cards.
       
       CRITICAL RULES FOR OUTPUTTING TEXT:
@@ -150,14 +144,14 @@ export const ContentRegistry: Record<string, ContentTypeDefinition> = {
     canvasConstraints: { 
       width: '1280px', 
       minHeight: 'auto', 
-      padding: '4rem 5rem', // Restored standard padding
+      padding: '4rem 5rem', 
       uiMaxWidth: '800px', 
-      uiMinHeight: 'auto' // 🚨 FIX: Document cards will now naturally size to their content!
+      uiMinHeight: 'auto' 
     },
     allowedExports: ['pdf', 'png'],
   },
 
-  // --- 2. THE SOCIAL MEDIA POST ---
+  // THE SOCIAL MEDIA POST 
   social: {
     id: 'social',
     name: 'Social Media Carousel',
@@ -227,7 +221,7 @@ export const ContentRegistry: Record<string, ContentTypeDefinition> = {
     },
     allowedExports: ['png', 'pdf'], 
   },
-  // --- 3. THE LANDING PAGE HERO ---
+  // THE LANDING PAGE HERO 
   landing: {
     id: 'landing',
     name: 'Landing Page Hero',

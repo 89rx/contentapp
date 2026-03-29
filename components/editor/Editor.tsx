@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link'; 
+
 import { useEditor, EditorContent } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus'; 
 import StarterKit from '@tiptap/starter-kit';
@@ -52,12 +54,12 @@ const CustomDocument = Document.extend({
 export default function Editor({ 
   config, 
   initialContent, 
-  initialTitle, // 🚨 Added this
+  initialTitle, 
   documentId 
 }: { 
   config: ContentTypeDefinition;
   initialContent?: string;
-  initialTitle?: string; // 🚨 Added this
+  initialTitle?: string; 
   documentId?: string;
 }) {
   const [isMounted, setIsMounted] = useState(false);
@@ -73,10 +75,10 @@ export default function Editor({
   const fileInputRef = useRef<HTMLInputElement>(null); 
   const isWritingDoc = useRef(false);
   
-  // 🚨 THE DOUBLE-FETCH SHIELD: React Strict Mode persists this across mounts
+  // React Strict Mode persists this across mounts
   const isProcessingImg = useRef(false); 
 
-  // 🚨 NEW: Create a live state for the document title
+  // Create a live state for the document title
   const [docTitle, setDocTitle] = useState(initialTitle || `Untitled ${config.name}`);
 
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'idle'>('idle');
@@ -167,7 +169,7 @@ export default function Editor({
 
   useEffect(() => {
     if (editor) {
-      // 🚨 FIX: Force read-only mode if the content type is 'landing'
+      // Force read-only mode if the content type is 'landing'
       const shouldBeEditable = config.id !== 'landing' && !isGlobalLock;
       
       if (editor.isEditable !== shouldBeEditable) {
@@ -176,7 +178,7 @@ export default function Editor({
     }
   }, [isGlobalLock, editor, config.id]);
 
-  // --- 1. THE MESSAGE LISTENER (PURE HTML STREAMING) ---
+  // THE MESSAGE LISTENER (PURE HTML STREAMING) 
   useEffect(() => {
     if (!editor || messages.length === 0) return;
 
@@ -207,13 +209,11 @@ export default function Editor({
     }
   }, [messages, editor]);
 
-  // --- 2. THE UNIVERSAL MULTI-IMAGE SCANNER ---
+  // THE UNIVERSAL MULTI-IMAGE SCANNER
   useEffect(() => {
     if (!editor || isLoading) return; 
 
-    // 🚨 FIX: We use a local mutable object to track the lock. 
-    // This perfectly bypasses stale closures in the event listener below 
-    // without violating React's Hook rules!
+    
     const processingState = { isWorking: false };
 
     const processImages = async () => {
@@ -335,7 +335,7 @@ export default function Editor({
           return true;
         });
 
-        // 🚨 Unlock the processor
+        // Unlock the processor
         processingState.isWorking = false;
         
         // Recursively trigger to catch any additional queued images
@@ -346,9 +346,9 @@ export default function Editor({
     // 1. Runs initially AND perfectly triggers when the main standard generation finishes (isLoading turns false)
     processImages();
 
-    // 🚨 2. We now ONLY listen for the manual triggers from our Edit routes.
+    // We now ONLY listen for the manual triggers from our Edit routes.
     const handleCustomTrigger = () => {
-      // 🚨 Safely checks our mutable state object
+      // Safely checks our mutable state object
       if (!processingState.isWorking && !isLoading) {
         processImages();
       }
@@ -395,9 +395,7 @@ export default function Editor({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!promptInput.trim() || isGlobalLock || !editor) return;
-    // 🚨 NEW: Dynamic Title Generation (Only if first time)
-    // We check if the document title in the DB needs updating
-    // For simplicity, we can just trigger a separate small fetch or bundle it
+    
     if (messages.length === 0) {
       generateAndSaveTitle(promptInput);
     }
@@ -429,7 +427,7 @@ export default function Editor({
       
       const title = await res.text();
       
-      // 🚨 CLEANING LOGIC: Strip any markdown or extra characters
+      // Strip any markdown or extra characters
       const cleanTitle = title
         .replace(/```html/gi, '') // Remove opening code block
         .replace(/```/gi, '')     // Remove closing code block
@@ -454,7 +452,7 @@ export default function Editor({
     return text;
   };
 
-  // --- 🚨 FIXED INLINE EDIT HANDLER ---
+  // FIXED INLINE EDIT HANDLER 
   const handleInlineEdit = async (actionPrompt: string) => {
     if (!editor) return;
     const { from, to } = editor.state.selection;
@@ -495,7 +493,7 @@ export default function Editor({
           .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') 
           .trim();
 
-        // 🚨 Safe Streaming Replacement (Try/Catch prevents TipTap from crashing on partial HTML)
+        // Safe Streaming Replacement (Try/Catch prevents TipTap from crashing on partial HTML)
         try {
           editor.chain()
             .setTextSelection({ from, to: currentEndPos })
@@ -528,7 +526,7 @@ export default function Editor({
       <ExportDialog
         isOpen={isExportDialogOpen}
         onClose={() => setIsExportDialogOpen(false)}
-        documentTitle={`Untitled ${config.name}`}
+        documentTitle={docTitle || `Untitled ${config.name}`}
         editor={editor}
         config={config} 
       />
@@ -878,14 +876,28 @@ export default function Editor({
         `}
       `}</style>
 
-      <div className="flex-1 flex flex-col bg-white border-r border-gray-200 shadow-sm z-10 relative">
+<div className="flex-1 flex flex-col bg-white border-r border-gray-200 shadow-sm z-10 relative">
         <div className="h-14 border-b border-gray-200 bg-white flex items-center px-6 justify-between shrink-0">
-        <div className="flex items-center gap-3">
-  <h1 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-    <span className="text-xl">{config.icon}</span> 
-    {/* 🚨 Use the DB title or fallback to the config name */}
-    {docTitle || `Untitled ${config.name}`}
-  </h1>
+          <div className="flex items-center gap-3">
+            
+            {/* 🚨 NEW: The Home/Back Button */}
+            <Link 
+              href="/" 
+              className="p-1.5 -ml-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Return to Home"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                <polyline points="9 22 9 12 15 12 15 22"></polyline>
+              </svg>
+            </Link>
+            
+            <div className="w-px h-5 bg-gray-300 mx-1" /> {/* Divider */}
+
+            <h1 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+              <span className="text-xl">{config.icon}</span> 
+              {docTitle || `Untitled ${config.name}`}
+            </h1>
   
   {/* 🚨 Auto-save Indicator (Already in your code, but ensure it's placed here) */}
   <div className="flex items-center gap-2 min-w-[100px]">

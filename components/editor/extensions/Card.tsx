@@ -100,20 +100,20 @@ const CardComponent = (props: any) => {
   return (
     <NodeViewWrapper 
       data-type="card" 
-      // 🚨 DYNAMIC INLINE STYLE: This overrides Tailwind and survives PDF exports!
+      // This overrides Tailwind and survives PDF exports!
       style={{ backgroundColor: currentColor }}
       className="group relative rounded-2xl shadow-sm border border-gray-200 mb-8 mx-auto transition-all hover:border-blue-300 hover:shadow-md overflow-hidden flex flex-col"
     >
       
       <NodeViewContent className="focus:outline-none flex-1 flex flex-col" />
 
-      {/* --- FLOATING HOVER CONTROLS --- */}
+      {/*FLOATING HOVER CONTROLS*/}
       <div 
         contentEditable={false}
         className="absolute bottom-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity !flex !flex-row items-center justify-center gap-1 bg-white border border-gray-200 shadow-sm rounded-lg p-1 z-50 w-max !h-auto"
       >
         
-        {/* 🚨 THE NEW COLOR PICKER DROPDOWN */}
+        {/*THE NEW COLOR PICKER DROPDOWN*/}
         <div className="relative flex items-center">
           <button
             onClick={() => { setShowColorPicker(!showColorPicker); setShowPrompt(false); }}
@@ -158,7 +158,7 @@ const CardComponent = (props: any) => {
 
         <div className="w-px h-4 bg-gray-300 mx-1" />
 
-        {/* The Ask AI Button */}
+        {/*The Ask AI Button*/}
         <button
           onClick={() => { setShowPrompt(!showPrompt); setShowColorPicker(false); }}
           className="px-2 py-1.5 text-xs font-bold text-purple-600 hover:bg-purple-50 rounded-md transition-colors flex items-center gap-1"
@@ -184,7 +184,7 @@ const CardComponent = (props: any) => {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
         </button>
 
-        {/* --- INLINE AI PROMPT INPUT --- */}
+        {/*INLINE AI PROMPT INPUT*/}
         {showPrompt && (
           <form onSubmit={handleAIEdit} className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-white border border-purple-200 shadow-xl rounded-xl p-2 flex items-center gap-2 w-72 z-50">
             <input
@@ -218,7 +218,6 @@ export const DocumentCard = Node.create({
   content: 'block+',
 
 
-  // 🚨 CRITICAL: We added backgroundColor to the TipTap schema!
   addAttributes() {
     return {
       backgroundColor: {

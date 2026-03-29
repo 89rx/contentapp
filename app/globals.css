@@ -26,7 +26,6 @@
     text-align: left;
   }
   
-  /* The blue overlay when selecting multiple cells */
   .tiptap table .selectedCell:after {
     background: rgba(200, 200, 255, 0.4);
     content: '';

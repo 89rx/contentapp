@@ -57,17 +57,17 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
 
   if (!isOpen) return null;
 
-  // 🚨 1. COUNT THE CARDS: Count how many cards exist in the current document
+  // Count how many cards exist in the current document
   const html = editor?.getHTML() || '';
   const cardCount = (html.match(/data-type="card"/g) || []).length;
 
-  // 🚨 2. UNIVERSAL DYNAMIC VISIBILITY
+  // UNIVERSAL DYNAMIC VISIBILITY
   let canExportPng = config.allowedExports.includes('png');
   let canExportPdf = config.allowedExports.includes('pdf');
 
   if (cardCount > 1) {
-    canExportPng = false; // Hide PNG for multiple pages (too long to screenshot)
-    canExportPdf = true;  // Force PDF for multi-page layouts!
+    canExportPng = false; 
+    canExportPdf = true;  
   } else if (config.id === 'social') {
     canExportPdf = false; // If it's a single social post, force them to use PNG
   }
@@ -80,7 +80,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
           <h2 className="text-xl font-bold text-gray-800">Export {config.name}</h2>
           <p className="text-sm text-gray-500 mt-1">Download a high-quality copy of <strong>{documentTitle}</strong>.</p>
           
-          {/* 🚨 Universal feedback message for multi-card layouts */}
+          {/* Universal feedback message for multi-card layouts */}
           {cardCount > 1 && (
             <p className="text-xs font-semibold text-purple-600 mt-3 bg-purple-50 p-2 rounded-lg border border-purple-100">
               Multiple cards detected. Exporting as a multi-page PDF.

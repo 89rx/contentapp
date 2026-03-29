@@ -4,13 +4,11 @@ import { streamText } from 'ai';
 export const runtime = 'edge';
 
 export async function POST(req: Request) {
-  // 🚨 Extract the dynamic system instruction sent from Editor.tsx
   const { prompt, selectedText, systemInstruction } = await req.json();
 
   const result = streamText({
     model: openai('gpt-4o'),
     
-    // 🚨 Dynamically apply the rules based on the content type!
     system: `${systemInstruction}
     
     STREAMING RULES:

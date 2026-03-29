@@ -9,7 +9,7 @@ export default async function LandingPage() {
 
   const { data: recentDocs } = await supabase
   .from('documents')
-  .select('id, type_id, updated_at, title') // 🚨 Added 'title'
+  .select('id, type_id, updated_at, title') 
   .order('updated_at', { ascending: false })
   .limit(6);
 
@@ -25,7 +25,7 @@ export default async function LandingPage() {
         </p>
       </div>
 
-      {/* 🚨 NEW: The Recent Documents Section */}
+      {/* The Recent Documents Section */}
       {recentDocs && recentDocs.length > 0 && (
         <div className="max-w-4xl w-full mb-12 animate-in fade-in">
           <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
@@ -36,7 +36,6 @@ export default async function LandingPage() {
               const config = ContentRegistry[doc.type_id];
               if (!config) return null;
               
-              // Format the date nicely
               const date = new Date(doc.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
               return (
@@ -49,7 +48,6 @@ export default async function LandingPage() {
                     {config.icon}
                   </div>
                   <div className="overflow-hidden">
-  {/* 🚨 Use the DB title, or fallback to the config name if title is null */}
   <h3 className="font-semibold text-gray-900 truncate">
     {doc.title || `Untitled ${config.name}`}
   </h3>

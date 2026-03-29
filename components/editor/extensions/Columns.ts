@@ -10,8 +10,6 @@ export const ColumnBlock = Node.create({
   },
 
   renderHTML({ HTMLAttributes }) {
-    // FIX: Removed gap, added 'divide-x' to create a subtle vertical line between columns
-    //return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'columns', class: 'flex flex-col sm:flex-row w-full my-8 sm:divide-x divide-gray-200' }), 0];
     return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'columns', class: 'flex flex-row w-full my-8 divide-x divide-gray-200' }), 0];
   },
 });
@@ -25,7 +23,6 @@ export const Column = Node.create({
   },
 
   renderHTML({ HTMLAttributes }) {
-    // FIX: Removed the card background, shadow, and borders. Just clean padding.
     return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'column', class: 'flex-1 px-6 focus:outline-none' }), 0];
   },
 });

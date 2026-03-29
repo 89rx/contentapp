@@ -1,12 +1,10 @@
-// app/api/documents/route.ts
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
 export async function PATCH(req: Request) {
   try {
-    const { id, content_html, title } = await req.json(); // 🚨 Destructure title
+    const { id, content_html, title } = await req.json(); 
     
-    // 🚨 Build update object dynamically
     const updateData: any = { updated_at: new Date() };
     if (content_html) updateData.content_html = content_html;
     if (title) updateData.title = title;

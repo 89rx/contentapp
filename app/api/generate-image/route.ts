@@ -17,7 +17,7 @@ export async function POST(req: Request) {
   try {
     console.log(`\n🌊 [Backend] Initiating Streaming Image Generation: "${finalPrompt}"`);
 
-    // 1. Enable streaming and request partial frames
+    // Enable streaming and request partial frames
     const stream = await openai.images.generate({
       model: "gpt-image-1-mini", 
       prompt: finalPrompt,
@@ -28,19 +28,19 @@ export async function POST(req: Request) {
       quality: "low"
     });
 
-    // 2. Convert to Web ReadableStream
+    // Convert to Web ReadableStream
     const readableStream = new ReadableStream({
       async start(controller) {
         for await (const event of stream) {
           
-          // 🚨 SCENARIO A: Streaming Partial Frames (Temporary Visuals)
+          // Streaming Partial Frames (Temporary Visuals)
           if (event.type === "image_generation.partial_image") {
             console.log(`🖼️ [Backend] Emitting partial image chunk`);
             const imageUrl = `data:image/png;base64,${event.b64_json}`;
             controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ url: imageUrl })}\n\n`));
           } 
           
-          // 🚨 SCENARIO B: The Final Image (Upload to Supabase for Permanent Storage)
+          // The Final Image (Upload to Supabase for Permanent Storage)
           else if (event.type === "image_generation.completed") {
             console.log(`✅ [Backend] Final image received. Uploading to Supabase...`);
             
@@ -86,7 +86,7 @@ export async function POST(req: Request) {
       }
     });
 
-    // 3. Return the stream with keep-alive headers
+    // Return the stream with keep-alive headers
     return new Response(readableStream, {
       headers: {
         'Content-Type': 'text/event-stream',

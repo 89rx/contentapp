@@ -30,20 +30,19 @@ export default async function DynamicEditorRoute({
   }
 
   let initialContent = null;
-  let initialTitle = null; // 🚨 New variable
+  let initialTitle = null; 
 
   if (resolvedSearch.id) {
     const { data } = await supabase
       .from('documents')
-      .select('content_html, title') // 🚨 Fetch title
+      .select('content_html, title') 
       .eq('id', resolvedSearch.id)
       .single();
       
     initialContent = data?.content_html;
-    initialTitle = data?.title; // 🚨 Store title
+    initialTitle = data?.title;
   }
 
-  // 🚨 Pass initialTitle to the Editor
   return (
     <Editor 
       config={config} 

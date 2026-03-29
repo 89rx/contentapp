@@ -1,7 +1,6 @@
-// app/api/export-pdf/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import puppeteer from 'puppeteer-core';
-import chromium from '@sparticuz/chromium-min'; // 🚨 CHANGED TO -MIN
+import chromium from '@sparticuz/chromium-min'; // CHANGED TO -MIN
 
 export const maxDuration = 60; 
 
@@ -90,7 +89,6 @@ export async function POST(req: NextRequest) {
       </html>
     `;
 
-    // 🚨 LOCAL FALLBACK SO YOU CAN STILL TEST ON YOUR COMPUTER
     const isLocal = process.env.NODE_ENV === 'development';
     let localExecutablePath;
     if (process.platform === 'win32') {
@@ -101,7 +99,6 @@ export async function POST(req: NextRequest) {
       localExecutablePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
     }
 
-    // 🚨 THE FIX: Pulling the file from GitHub when running on Vercel
     const browser = await puppeteer.launch({
       args: isLocal ? ['--no-sandbox', '--disable-setuid-sandbox'] : chromium.args,
       executablePath: isLocal 
@@ -122,7 +119,6 @@ export async function POST(req: NextRequest) {
 
     await browser.close();
 
-    // 🚨 'as any' bypasses the NextJS Type Error
     return new NextResponse(pdfBuffer as any, {
       status: 200,
       headers: {

@@ -20,7 +20,7 @@ export const MenuBar = ({ editor }: { editor: Editor | null }) => {
       isActive ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'
     }`;
 
-  // 🚨 NEW: The Native File Upload Handler
+  // The Native File Upload Handler
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -92,7 +92,7 @@ export const MenuBar = ({ editor }: { editor: Editor | null }) => {
       
       <div className="w-px h-5 bg-gray-300 mx-1" />
       
-      {/* 🚨 THE NEW IMAGE UPLOAD UI */}
+      {/*THE NEW IMAGE UPLOAD UI*/}
       <input 
         type="file" 
         accept="image/png, image/jpeg, image/gif, image/webp" 

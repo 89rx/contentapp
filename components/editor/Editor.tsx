@@ -507,7 +507,7 @@ export default function Editor({
         }
       }
       
-      // 🚨 Trigger the image scanner in case the AI added a new image tag!
+      // Trigger the image scanner in case the AI added a new image tag!
       window.dispatchEvent(new CustomEvent('editor:trigger-image-scan'));
 
     } catch (error) {
